@@ -18,6 +18,10 @@ Open [the playground](http://127.0.0.1:4173/). The 3D view uses WebGL 2 and load
 - Open **Motion** to choose an animation, preview a sound cue, or enable **Auto sounds**.
 - Open **Share** to copy a link. Switch to **Pixel** to download a PNG, SVG, or sprite sheet.
 
+## Composer demo
+
+[Open the composer demo](https://publicknowledgestudio.github.io/sycritters-3d/critter-test/) to interact with a pixel critter that follows your cursor and reacts as you type.
+
 ## Run the tests
 
 ```sh
