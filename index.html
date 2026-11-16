@@ -1,0 +1,2140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sycritters 3D</title>
+<link rel="icon" href="data:," />
+<style>
+  :root {
+    --bg:          #ffffff;
+    --surface:     #ffffff;
+    --border:      #d4d4d0;
+    --border-hover:#999999;
+    --text:        #1a1a1a;
+    --text-dim:    #888888;
+    --accent:      #ff3e00;
+    --sans: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.4;
+  }
+  #app { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 32px 28px 96px; }
+
+  /* ---- masthead ---- */
+  .masthead { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 36px; }
+  .wordmark {
+    font-weight: 750;
+    font-size: 26px; letter-spacing: -.04em; line-height: 1; margin: 0; color: var(--text);
+  }
+  .wordmark b { color: var(--accent); font-weight: 700; }
+  .tagline { font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
+
+  /* ---- main stage ---- */
+  .stage { display: grid; gap: 40px; align-items: start; grid-template-columns: minmax(0, 1fr) 280px; }
+  @media (max-width: 820px) {
+    .stage { grid-template-columns: 1fr; }
+  }
+
+  /* specimen (the editor preview) */
+  .specimen { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 24px; }
+  .specimen__card {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    opacity: calc(1 - var(--model-opacity, 0));
+  }
+  /* Align the 12-cell padded sprite with the orthographic camera's 10.2 × 10.6 minimum span. */
+  #editor { image-rendering: pixelated; width: min(117.64cqw, 113.2cqh); height: auto; display: block; }
+  .preview-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .view-switch { display: flex; gap: 6px; }
+  .stage-3d {
+    position: relative; width: 88%; margin-inline: auto; aspect-ratio: 1.22; container-type: size;
+    overflow: hidden;
+  }
+  .stage-3d > canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    opacity: var(--model-opacity, 0); pointer-events: none;
+    filter: drop-shadow(0 1px 2px #20243435) drop-shadow(0 0 12px var(--glow-color, transparent));
+  }
+  .stage-3d > canvas[tabindex="0"] { cursor: grab; pointer-events: auto; }
+  .stage-3d > canvas:active { cursor: grabbing; }
+  .stage-3d > canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+  .stage-3d__status {
+    position: absolute; inset: 0; display: grid; place-content: center; margin: 0;
+    padding: 20px; text-align: center; color: #dce5ee; background: #161f2c;
+  }
+  .stage-3d__status[hidden], .stage-3d__toolbar[hidden] { display: none; }
+  #app[data-view="3d"] [data-pixel-only] { display: none; }
+  [data-3d-only], .editor-menus, .wall-pages { display: none; }
+  #app[data-view="3d"] [data-3d-only]:not([hidden]) { display: block; }
+  html:has(#app[data-view="3d"]) { overflow: hidden; }
+  #app[data-view="3d"] {
+    height: 100dvh; max-width: 1060px; padding: 16px 24px 12px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  #app[data-view="3d"] .masthead { margin: 0; align-items: center; min-height: 28px; }
+  #app[data-view="3d"] .tagline, #app[data-view="3d"] .foot { display: none; }
+  #app[data-view="3d"] .wall { margin: 0; }
+  #app[data-view="3d"] .wall__head { margin-bottom: 6px; }
+  #app[data-view="3d"] .wall-pages { display: flex; align-items: center; gap: 5px; }
+  #app[data-view="3d"] #genWall { margin-left: auto; }
+  #app[data-view="3d"] .wall__grid { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; }
+  #app[data-view="3d"] .tile { padding: 3px; height: clamp(32px, 9dvh, 68px); aspect-ratio: auto; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+  #app[data-view="3d"] .tile[hidden] { display: none; }
+  #app[data-view="3d"] .tile canvas { width: 100%; height: 100%; object-fit: contain; }
+  #app[data-view="3d"] .tile[aria-pressed="true"] { border-color: var(--accent); }
+  #app[data-view="3d"] .stage {
+    position: relative; display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; align-items: stretch;
+  }
+  #app[data-view="3d"] .specimen { position: static; flex: 1; min-height: 0; gap: 6px; }
+  #app[data-view="3d"] #preview3D { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+  #app[data-view="3d"] .stage-3d {
+    width: min(100%, 600px); flex: 1; min-height: 0; max-height: none; aspect-ratio: auto;
+  }
+  #app[data-view="3d"] .stage-3d__toolbar { margin-top: 0; }
+  #app[data-view="3d"] .controls { position: absolute; bottom: calc(var(--menu-height, 34px) + 8px); right: 0; width: min(380px, 100%); z-index: 4; }
+  #app[data-view="3d"] .controls > .ctl { display: none; }
+  #app[data-view="3d"] .controls > .ctl.is-open {
+    display: block; max-height: min(440px, 65dvh); overflow: auto;
+    border-radius: 12px; box-shadow: 0 12px 36px #25263826;
+  }
+  #app[data-view="3d"] .editor-menus { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); grid-auto-rows: 34px; gap: 5px; }
+  .editor-menus .btn { padding: 4px 2px; }
+  .editor-menus .btn[aria-expanded="true"] { color: var(--surface); background: var(--text); border-color: var(--text); }
+  .wall-pages button { padding: 5px 7px; }
+  .wall-pages button:disabled { opacity: .4; cursor: default; }
+  #app[data-view="3d"] #bodyAnim { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #app[data-view="3d"] #bodyAnim button { padding: 5px 3px; font-size: 10px; }
+  #app[data-view="3d"] #eyeShape3D { display: grid; }
+  #app[data-view="3d"] .stage-3d__hint { margin-left: auto; }
+  @media (max-width: 590px) {
+    #app[data-view="3d"] { padding-inline: 10px; gap: 8px; }
+    #app[data-view="3d"] .wall__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    #app[data-view="3d"] .stage { --menu-height: 112px; }
+    #app[data-view="3d"] .editor-menus { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    #app[data-view="3d"] .controls > .ctl.is-open { max-height: min(58dvh, calc(100dvh - 260px)); }
+    #app[data-view="3d"] .stage-3d__hint { display: none; }
+  }
+  .stage-3d__hint { margin: 0; font-size: 11px; color: #5a5a5a; }
+  .stage-3d__toolbar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+  }
+  .stage-3d__toolbar #resetOrbit { margin-left: auto; }
+  .preview-scale { display: inline-flex; align-items: center; gap: 5px; }
+  .preview-scale input { width: clamp(42px, 9vw, 78px); margin: 0; accent-color: var(--accent); }
+  .preview-scale output { min-width: 3.5ch; font-variant-numeric: tabular-nums; }
+  #micToggle { padding: 6px 8px; }
+  #micToggle svg { width: 14px; height: 14px; }
+  #micToggle[data-listening="true"] { background: #d8fbe9; border-color: #23875c; color: #155537; }
+  .mic-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; min-height: 1.4em; color: #565656; font-size: 12px; }
+  .mic-feedback p { margin: 0; }
+  .mic-feedback meter { width: 55px; height: 10px; accent-color: #23875c; }
+  .mic-feedback a { color: inherit; font-weight: 650; }
+  #app:not([data-view="3d"]) .mic-feedback { display: none; }
+  .avatar-preview {
+    display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 3px 8px;
+    border: 1px solid var(--border); font-size: 11px; color: #5a5a5a; white-space: nowrap;
+  }
+  .avatar-preview canvas { display: block; width: 24px; height: 24px; }
+  .avatar-preview[hidden] { display: none; }
+  @media (min-width: 821px) {
+    .stage-3d { max-height: max(264px, calc((100svh - 240px) * 0.88)); }
+  }
+  @media (max-width: 820px) { .stage .specimen { position: static; } }
+  .specimen__plate {
+    display: flex; align-items: baseline; gap: 10px;
+    font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;
+  }
+  .specimen__plate .k { color: var(--accent); }
+  .specimen__plate .v { color: var(--text); text-transform: none; word-break: break-all; }
+
+  /* second, size-adjustable preview (drag SIZE to see the critter scaled down) */
+  .specimen__mini {
+    display: flex; flex-direction: column; gap: 10px;
+    border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px;
+  }
+  .specimen__mini-stage {
+    background: var(--surface); border: 1px solid var(--border);
+    min-height: 56px; display: grid; place-items: center; padding: 12px;
+  }
+  #miniPreview { image-rendering: pixelated; display: block; }
+  .specimen__mini-ctl {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;
+  }
+  .specimen__mini-ctl .k { color: var(--accent); }
+  .specimen__mini-ctl input[type="range"] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  .specimen__mini-ctl .v { color: var(--text); text-transform: none; min-width: 42px; text-align: right; }
+
+  /* ---- controls ---- */
+  .controls { display: flex; flex-direction: column; gap: 20px; }
+  .ctl { background: var(--surface); border: 1px solid var(--border); padding: 16px; }
+  .ctl__label {
+    display: block; font-size: 13px; font-weight: 650; color: var(--text);
+    margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .ctl__label span { font-weight: 400; color: #5a5a5a; }
+  .sublabel {
+    display: block; font-size: 12px; font-weight: 550;
+    color: #5a5a5a; margin: 12px 0 6px;
+    text-transform: capitalize;
+  }
+
+  .field {
+    font-family: inherit; font-size: 13px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 7px 9px; width: 100%; outline: none; transition: border-color .15s;
+  }
+  .field:focus { border-color: var(--accent); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    font-family: inherit; font-size: 12px; font-weight: 550;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    padding: 9px 12px; cursor: pointer; user-select: none; transition: all .12s;
+  }
+  .btn:hover { border-color: var(--text); background: var(--text); color: var(--surface); }
+  .btn:active { transform: scale(.97); }
+  .btn[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+
+  .seedrow { display: flex; gap: 8px; margin-bottom: 8px; }
+  .seedrow .field { flex: 1; }
+  .btn--icon { padding: 7px 10px; font-size: 12px; }
+  .btn--full { width: 100%; }
+
+  .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+  .swatch {
+    aspect-ratio: 1; border: 1px solid var(--border); cursor: pointer; padding: 0;
+    position: relative; transition: border-color .12s;
+  }
+  .swatch:hover { border-color: var(--border-hover); }
+  .swatch[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .swatch--rand {
+    background: conic-gradient(#ffb000,#b8d94a,#5ee0a0,#28c7c7,#3b82f6,#6d5dfc,#c056d9,#ff6b5a,#ffb000);
+    color: #fff; font-size: 12px; display: grid; place-items: center; font-weight: 700;
+    text-shadow: 0 1px 1px rgba(0,0,0,.45);
+  }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg + .seg { margin-top: 8px; }
+  .seg button {
+    font-family: inherit; font-size: 12px;
+    background: var(--surface); color: #555; border: 1px solid var(--border);
+    padding: 5px 9px; cursor: pointer; transition: all .12s;
+  }
+  .seg button:hover { border-color: var(--border-hover); color: var(--text); }
+  .seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+  #soundOptions button { display: inline-flex; align-items: center; gap: 6px; }
+  #soundOptions button[data-playing="true"] { border-color: var(--text); color: var(--text); background: #f2f2ef; }
+  #autoSoundsHint { margin: 3px 0 0; color: #555; font-size: 12px; }
+  #soundStatus:not(:empty) { margin: 6px 0 0; color: #555; font-size: 12px; }
+  #soundStatus:empty { margin: 0; }
+  .seg--icons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .seg--icons button { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 6px; text-align: left; }
+  .option-icon { display: grid; flex: 0 0 23px; place-items: center; width: 23px; height: 23px; }
+  .option-icon svg { display: block; width: 100%; height: 100%; }
+  #eyeShape3D .option-icon { background: #dff4e9; border-radius: 5px; }
+  /* options random generation skips (manual / Surprise Me territory) */
+  .seg button.spice::after { content: "·"; color: var(--accent); margin-left: 4px; font-weight: 700; }
+  .seg--preview button {
+    width: calc(50% - 3px); min-height: 42px; display: inline-flex; align-items: center;
+    justify-content: flex-start; gap: 8px; padding: 6px 7px; text-align: left;
+  }
+  .mini8 {
+    flex: 0 0 auto; display: grid; grid-template-columns: repeat(8, 3px);
+    grid-template-rows: repeat(8, 3px); gap: 1px; padding: 2px;
+    border: 1px solid var(--border); background: #f5f5f2;
+  }
+  .mini8 i { width: 3px; height: 3px; background: #ecece8; display: block; }
+  .mini8 i.on { background: var(--text); }
+  .shape-thumbnail { display: none; flex: 0 0 36px; width: 36px; height: 36px; }
+  .show-shape-thumbnails .mini8 { display: none; }
+  .show-shape-thumbnails .shape-thumbnail { display: block; }
+  .seg button[aria-pressed="true"] .mini8 { border-color: var(--surface); background: #3a3a3a; }
+  .seg button[aria-pressed="true"] .mini8 i { background: #4f4f4f; }
+  .seg button[aria-pressed="true"] .mini8 i.on { background: var(--surface); }
+  .seg__text { min-width: 0; overflow-wrap: anywhere; }
+
+  .check {
+    display: flex; align-items: center; gap: 8px; margin-top: 12px;
+    font-size: 12px; color: var(--text-dim); cursor: pointer; user-select: none;
+  }
+  .check input { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+
+  .exportrow { display: flex; gap: 8px; }
+  .exportrow .btn { flex: 1; }
+
+  /* ---- the wall ---- */
+  .wall { margin: 0 0 44px; }
+  .wall__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 14px; }
+  .wall__head h2 {
+    font-size: 13px; font-weight: 650;
+    margin: 0; color: var(--text);
+  }
+  .wall__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px; }
+  .tile {
+    width: 100%; aspect-ratio: 1;
+    background: var(--surface); border: 1px solid var(--border); padding: 8%; cursor: pointer;
+    transition: border-color .12s;
+  }
+  .tile:hover, .tile:focus-visible { border-color: var(--accent); }
+  .tile canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  .tile .wall-model { display: none; image-rendering: auto; }
+  #app[data-view="3d"] .tile .wall-model:not([hidden]) { display: block; }
+  #app[data-view="3d"] .tile:has(.wall-model:not([hidden])) .wall-sprite { display: none; }
+  .foot { margin-top: 44px; color: var(--text-dim); font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
+  .foot a { color: var(--accent); text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<main id="app">
+  <header class="masthead">
+    <h1 class="wordmark">SY<b>CRITTERS</b></h1>
+    <p class="tagline">an 8&times;8 creature generator</p>
+  </header>
+
+  <section class="wall">
+    <div class="wall__head">
+      <h2>The Wall</h2>
+      <button id="genWall" class="btn">Generate &#9656;</button>
+      <div class="wall-pages" aria-label="Wall pages">
+        <button id="wallPrevious" class="btn" type="button" aria-label="Previous wall page">&larr;</button>
+        <button id="wallNext" class="btn" type="button" aria-label="Next wall page">&rarr;</button>
+      </div>
+    </div>
+    <div id="grid" class="wall__grid"></div>
+  </section>
+
+  <section class="stage" id="playground">
+    <div class="specimen">
+      <div class="preview-bar">
+        <div class="view-switch" role="group" aria-label="Preview mode">
+          <button class="btn" id="viewPixel" type="button" aria-pressed="true" aria-controls="pixelStage">Pixel</button>
+          <button class="btn" id="view3D" type="button" aria-pressed="false" aria-controls="preview3D">3D</button>
+        </div>
+      </div>
+      <div id="preview3D">
+        <div class="stage-3d" id="stage3D">
+          <div class="specimen__card" id="pixelStage"><canvas id="editor" width="256" height="256" role="img" aria-label="current critter preview"></canvas></div>
+          <p class="stage-3d__status" id="status3D" role="status" hidden>Loading 3D preview…</p>
+        </div>
+        <div class="stage-3d__toolbar" id="toolbar3D" hidden>
+          <div class="avatar-preview" id="avatarPreview" hidden>
+            <canvas id="avatar3D" width="48" height="48" role="img" aria-label="Animated 3D critter at 24 pixels"></canvas>
+            <span>24 px</span>
+          </div>
+          <p class="stage-3d__hint" id="orbitHint">Drag or use arrow keys to orbit</p>
+          <label class="preview-scale" title="Scale the main preview">
+            Scale <input id="previewScale" type="range" min="50" max="115" step="5" value="100" />
+            <output id="previewScaleValue" for="previewScale" aria-hidden="true">100%</output>
+          </label>
+          <button class="btn" id="micToggle" type="button" aria-pressed="false" aria-describedby="micStatus" disabled>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><rect x="6" y="1.5" width="4" height="8" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5m-2 0h4"/></svg>
+            Mic
+          </button>
+          <button class="btn" id="resetOrbit" type="button" disabled>Reset view</button>
+        </div>
+        <div class="mic-feedback">
+          <p id="micStatus" role="status"></p>
+          <meter id="micLevel" min="0" max="1" value="0" aria-label="Microphone input level" hidden></meter>
+          <a id="micBrowserLink" href="./index.html?view=3d" target="_blank" rel="noopener" hidden>Open in a browser</a>
+        </div>
+      </div>
+      <div class="specimen__plate"><span class="k">SEED</span><span class="v" id="seedReadout">&mdash;</span></div>
+      <div class="specimen__mini" data-pixel-only>
+        <div class="specimen__mini-stage"><canvas id="miniPreview" role="img" aria-label="scaled critter preview"></canvas></div>
+        <label class="specimen__mini-ctl">
+          <span class="k">SIZE</span>
+          <input id="miniSize" type="range" min="16" max="256" step="1" value="96" aria-label="preview size in pixels" />
+          <span class="v" id="miniSizeVal">96px</span>
+        </label>
+      </div>
+    </div>
+
+    <nav class="editor-menus" aria-label="Critter editing">
+      <button class="btn" type="button" aria-expanded="false" aria-controls="seedMenu">Seed</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="colorMenu">Color</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="topMenu">Top</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="middleMenu">Middle</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="bottomMenu">Bottom</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="eyesMenu">Eyes</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="accessoryMenu">Accessories</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="motionMenu">Motion</button>
+      <button class="btn" type="button" aria-expanded="false" aria-controls="shareMenu">Share</button>
+    </nav>
+    <aside class="controls">
+      <div class="ctl" id="seedMenu">
+        <label class="ctl__label" for="seed">&#9646; Seed</label>
+        <div class="seedrow">
+          <input id="seed" class="field" spellcheck="false" autocomplete="off" />
+          <button id="rand" class="btn btn--icon" title="Random seed">&#127922;</button>
+        </div>
+        <button id="surprise" class="btn btn--full">Surprise me</button>
+      </div>
+
+      <div class="ctl" id="colorMenu">
+        <label class="ctl__label">&#9646; Color</label>
+        <div id="palette" class="swatches"></div>
+        <span class="sublabel">colors</span>
+        <div id="colorCount" class="seg"></div>
+        <span class="sublabel">gradient</span>
+        <div id="gradDir" class="seg"></div>
+      </div>
+
+      <div class="ctl" id="topMenu">
+        <label class="ctl__label">&#9646; Top</label>
+        <div id="tops" class="seg seg--preview"></div>
+      </div>
+
+      <div class="ctl" id="middleMenu">
+        <label class="ctl__label">&#9646; Middle <span>&mdash; the two waist rows</span></label>
+        <div id="waist" class="seg seg--preview"></div>
+      </div>
+
+      <div class="ctl" id="bottomMenu">
+        <label class="ctl__label">&#9646; Bottom</label>
+        <div id="bottoms" class="seg seg--preview"></div>
+      </div>
+
+      <div class="ctl" id="eyesMenu">
+        <label class="ctl__label">&#9646; Eyes</label>
+        <div id="eyeShape3D" class="seg seg--icons" data-3d-only role="group" aria-label="Eye shape"></div>
+        <span class="sublabel" data-pixel-only>style</span>
+        <div id="eyeStyle" class="seg" data-pixel-only></div>
+        <div id="pupilOptions">
+          <span class="sublabel">pupil</span>
+          <div id="eyePupil" class="seg" title="dot = 1px, bar = 1x2 column (2x2 eyes)"></div>
+        </div>
+        <span class="sublabel">gaze</span>
+        <div id="eyeMirror" class="seg" title="mirrored = pupils point inward/outward together"></div>
+        <span class="sublabel">gap</span>
+        <div id="eyeGap" class="seg" title="px between the eyes"></div>
+        <span class="sublabel">align</span>
+        <div id="eyeAlign" class="seg"></div>
+        <label class="check"><input type="checkbox" id="animEyes" checked /> animate eyes</label>
+      </div>
+
+      <div class="ctl" id="accessoryMenu" data-3d-only>
+        <p class="ctl__label">Accessories</p>
+        <div id="accessoryOptions" class="seg seg--icons" role="group" aria-label="Accessory"></div>
+      </div>
+
+      <div class="ctl" id="motionMenu">
+        <label class="ctl__label">&#9646; Motion</label>
+        <div id="bodyAnim" class="seg"></div>
+        <div id="pushPanel" hidden>
+          <span class="sublabel">push direction</span>
+          <div id="pushDir" class="seg" title="which way the critter pushes"></div>
+          <span class="sublabel">transition to</span>
+          <div id="pushDirB" class="seg" title="second push direction for the A&#8644;B transition clip"></div>
+          <button id="pushPlay" class="btn btn--full" style="margin-top:8px" title="preview the A&#8644;B push transition in the editor">&#9656; play transition</button>
+        </div>
+        <p class="sublabel" id="soundsLabel">Sounds</p>
+        <div id="soundOptions" class="seg" role="group" aria-labelledby="soundsLabel">
+          <button type="button" data-sound="hello"><span aria-hidden="true">▶</span> Hello</button>
+          <button type="button" data-sound="soft-beeps"><span aria-hidden="true">▶</span> Soft beeps</button>
+          <button type="button" data-sound="bright-chirp"><span aria-hidden="true">▶</span> Bright chirp</button>
+          <button type="button" data-sound="curious-trill"><span aria-hidden="true">▶</span> Curious trill</button>
+          <button type="button" data-sound="sleepy-hum"><span aria-hidden="true">▶</span> Sleepy hum</button>
+        </div>
+        <label class="check" data-3d-only><input type="checkbox" id="autoSounds" aria-describedby="autoSoundsHint" /> Auto sounds</label>
+        <p id="autoSoundsHint" data-3d-only>Greets you when you approach, beeps after you speak, and reacts to a tap or a change in mood.</p>
+        <p id="soundStatus" role="status"></p>
+        <audio id="soundPreview" preload="none"></audio>
+      </div>
+
+      <div class="ctl" id="shareMenu">
+        <label class="ctl__label" id="exportLabel">&#9646; Export</label>
+        <div class="exportrow">
+          <button id="png" class="btn" data-pixel-only>PNG</button>
+          <button id="svg" class="btn" data-pixel-only>SVG</button>
+          <button id="sheet" class="btn" title="12-frame sprite sheet" data-pixel-only>Sheet</button>
+          <button id="link" class="btn" title="copy a shareable link">Link</button>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="foot">made with pixels &middot; same seed &rarr; same critter</footer>
+</main>
+
+<!-- SYCRITTERS-ENGINE:START -->
+<script>
+globalThis.Sycritters = (function () {
+  "use strict";
+  const VERSION = "0.0.1";
+
+  // --- Seeded RNG ---------------------------------------------------------
+  function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return function () {
+      h = Math.imul(h ^ (h >>> 16), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      return (h ^= h >>> 16) >>> 0;
+    };
+  }
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Returns a PRNG function seeded by an arbitrary string.
+  function rng(seed) {
+    return mulberry32(xmur3(String(seed))());
+  }
+
+  // --- Curated palette ----------------------------------------------------
+  // Ordered around the hue wheel so consecutive entries are analogous
+  // (gradients are built from consecutive runs -> always harmonious).
+  const PALETTE = [
+    { name: "amber",      hex: "#ffb000" },
+    { name: "chartreuse", hex: "#b8d94a" },
+    { name: "mint",       hex: "#5ee0a0" },
+    { name: "teal",       hex: "#28c7c7" },
+    { name: "azure",      hex: "#3b82f6" },
+    { name: "violet",     hex: "#6d5dfc" },
+    { name: "orchid",     hex: "#c056d9" },
+    { name: "coral",      hex: "#ff6b5a" },
+  ];
+
+  // --- Shared option lists (used by generate + the spec codec) -------------
+  const DIRS = ["none", "diagonal-left", "diagonal-right", "radial"];
+  // Legacy paint-motion codec axis. The UI now exposes agent states instead.
+  const MOTIONS = ["static", "drift", "pulse", "sheen"];
+  const WAISTS = ["straight", "pinch", "narrow", "bite-l", "bite-r"];
+  const EYE_STYLES = ["normal", "tall", "visor", "visor2", "short"]; // appended: codec indices stay stable
+  const ALIGNS = ["left", "center", "right"];
+  const PUPILS = ["dot", "bar"];
+
+  // --- Module vocabulary --------------------------------------------------
+  // Each module is a 4x4 left-half block. Columns are left->center
+  // [x0,x1,x2,x3]; x3 abuts the mirror line. Tops fill rows 0-3, bottoms 4-7.
+  const TOPS = [
+    { name: "dome",     rows: [[0,0,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "flat",     rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "notch",    rows: [[0,0,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "ears",     rows: [[0,1,1,0],[0,1,1,0],[1,1,1,1],[1,1,1,1]] },
+    { name: "antennae", rows: [[0,1,0,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "loaf",     rows: [[0,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // corners-cut flat
+    { name: "crown",    rows: [[1,0,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // flat with 1px slits
+    { name: "w",        rows: [[0,1,1,0],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // horns, center fills a row lower
+    { name: "trident",  rows: [[0,1,0,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // three nubs
+    { name: "dots",     rows: [[1,0,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // detached corner pixels
+    { name: "handle",   rows: [[1,1,1,1],[0,1,1,1],[1,1,1,1],[1,1,1,1]] }, // full cap, open side pixels
+    { name: "lego",     rows: [[0,0,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] }, // centered 4-wide nub
+    { name: "tail-l", full: true, rows: [[1,0,0,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "tail-r", full: true, rows: [[1,1,1,1,1,0,0,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
+    { name: "2tl", full: true, rows: [[0,0,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "2tr", full: true, rows: [[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "3tl", full: true, rows: [[0,0,0,1,1,1,1,1],[0,0,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1]] },
+    { name: "3tr", full: true, rows: [[1,1,1,1,1,0,0,0],[1,1,1,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1]] },
+  ];
+  const BOTTOMS = [
+    { name: "flat",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]] },
+    { name: "round",   rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[0,0,1,1]] },
+    { name: "legs",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,1,0]] },
+    { name: "splayed", rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,0]] },
+    { name: "tripod",  rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,0,1]] }, // 2-1-2-1-2 legs
+    { name: "tripod2", rows: [[1,1,1,1],[1,1,1,1],[1,1,0,1],[1,1,0,1]] }, // tripod on 2-row stilts
+    { name: "toes",    rows: [[1,1,1,1],[1,1,1,1],[1,1,1,1],[0,1,0,1]] }, // three inset feet (1-2-1)
+    { name: "toes-a",  full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,0,1,0,1,0,1,0]] },
+    { name: "toes-b",  full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,0,1,0,1,0,1]] },
+    { name: "dots",    rows: [[1,1,1,1],[1,1,1,1],[0,1,1,1],[1,0,1,1]] }, // detached corner pixels
+    // asymmetric diagonal slants (full 8-wide, not mirrored); 2 = shallow, 3 = deep:
+    { name: "2bl", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[0,0,1,1,1,1,1,1]] },
+    { name: "2br", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,0,0]] },
+    { name: "3bl", full: true, rows: [[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,1],[0,0,1,1,1,1,1,1],[0,0,0,1,1,1,1,1]] },
+    { name: "3br", full: true, rows: [[1,1,1,1,1,1,1,1],[1,1,1,1,1,1,1,0],[1,1,1,1,1,1,0,0],[1,1,1,1,1,0,0,0]] },
+  ];
+
+  // --- Generation: seed -> spec ------------------------------------------
+  function pick(r, arr) {
+    return arr[Math.floor(r() * arr.length)];
+  }
+
+  // A short seed string derived from a rng (used by the 🎲 button).
+  function randomSeed(r) {
+    return Math.floor(r() * 0xffffffff).toString(36);
+  }
+
+  function generate(seed) {
+    const r = rng(seed);
+    const n = r() < 0.85 ? 2 : 3;                       // mostly 2 colors (subtle)
+    const start = Math.floor(r() * PALETTE.length);
+    const colors = [];                                  // analogous run -> harmonious
+    for (let j = 0; j < n; j++) colors.push(PALETTE[(start + j) % PALETTE.length]);
+    const gradientDir = DIRS[Math.floor(r() * DIRS.length)];
+    const gradientMotion = "static";
+    const slant = (nm) => /^[23][tb][lr]$/.test(nm);
+    const deep = (nm) => /^3[tb][lr]$/.test(nm);          // deep slants read lopsided -> manual-only
+    const top = pick(r, TOPS.filter((m) => !deep(m.name))).name;
+    let bpool = BOTTOMS.filter((m) => !deep(m.name));
+    if (slant(top)) bpool = bpool.filter((m) => !slant(m.name)); // at most one slant
+    const bottom = pick(r, bpool).name;
+    let waist = ["straight", "straight", "straight", "pinch", "pinch", "narrow"][Math.floor(r() * 6)];
+    if ((slant(top) || slant(bottom)) && waist === "narrow") waist = "straight"; // slant already trims
+    // mild one-sided bite, decided after the eye gap below so spec and render
+    // always agree (both rolls kept here so downstream seeds don't shift)
+    const biteRoll = r(); r();
+    r(); // keep seeded RNG sequence stable while eyes are temporarily fixed.
+    const style = "normal";
+    const row = 2 + (r() < 0.5 ? 0 : 1);               // 2 or 3
+    const gap = r() < 0.5 ? 1 : 2;                      // px between the eyes (no 0)
+    // the eye frame refills empty cells next to eyes: gap-1 centered eyes sit
+    // at cols 1-2 / 4-5, leaving only col 7 clear -> random bites are right-
+    // side and gap-1 only; bite-l stays a manual pick
+    if (biteRoll < 0.15 && waist === "straight" && gap === 1 && !slant(top) && !slant(bottom))
+      waist = "bite-r";
+    const align = (r(), "center"); // random eyes stay centered; left/right is a manual control
+    const gaze = { dx: r() < 0.5 ? 0 : 1, dy: r() < 0.6 ? 0 : 1 };
+    // random eyes are always parallel bar pupils (rolls kept so seeds don't shift);
+    // dot pupils and mirrored gaze stay manual picks
+    r(); r();
+    const pupil = "bar";
+    const mirror = false;
+    return { seed: String(seed), colors, gradientDir, gradientMotion, top, bottom, waist,
+      eyes: { style, row, gap, align, gaze, pupil, mirror } };
+  }
+
+  // --- Rasterize: spec -> 8x8 grid of codes (0 empty,1 body,2 white,3 pupil)
+  function moduleByName(group, name) {
+    return group.find((m) => m.name === name) || group[0];
+  }
+
+  function emptyGrid() {
+    return Array.from({ length: 8 }, () => new Array(8).fill(0));
+  }
+
+  // frame = { gaze:{dx,dy}, blink:bool } — optional; defaults to spec's eyes.
+  // Expand a module to full 8-wide rows: symmetric modules mirror their 4-wide
+  // left half; `full` modules already define all 8 columns (asymmetric slants).
+  function expandRows(m) {
+    if (m.full) return m.rows;
+    return m.rows.map((r) => [r[0], r[1], r[2], r[3], r[3], r[2], r[1], r[0]]);
+  }
+
+  function rasterize(spec, frame) {
+    const g = emptyGrid();
+    const rows8 = [
+      ...expandRows(moduleByName(TOPS, spec.top)),       // rows 0-3
+      ...expandRows(moduleByName(BOTTOMS, spec.bottom)), // rows 4-7
+    ];
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++)
+        if (rows8[y][x]) g[y][x] = 1;
+
+    // Waist: pinch the two middle rows (3,4) inward.
+    if (spec.waist === "pinch" || spec.waist === "narrow") {
+      for (const y of [3, 4]) { g[y][0] = 0; g[y][7] = 0; }
+    }
+    if (spec.waist === "narrow") {
+      for (const y of [3, 4]) { g[y][1] = 0; g[y][6] = 0; }
+    }
+    // one-sided bites (asymmetric on purpose)
+    if (spec.waist === "bite-l") for (const y of [3, 4]) g[y][0] = 0;
+    if (spec.waist === "bite-r") for (const y of [3, 4]) g[y][7] = 0;
+
+    // frame.legShift ∈ {-1,0,1}: nudge the feet sideways (celebrate cycle).
+    // Row 6 shifts along with row 7 when it has gaps (2-row stilts like
+    // tripod2 must move as one piece instead of shearing).
+    if (frame && frame.legShift) {
+      const s = frame.legShift;
+      const shiftRow = (row) => {
+        const out = new Array(8).fill(0);
+        for (let x = 0; x < 8; x++) {
+          const nx = x + s;
+          if (nx >= 0 && nx < 8) out[nx] = row[x];
+        }
+        return out;
+      };
+      g[7] = shiftRow(g[7]);
+      if (g[6].includes(0)) g[6] = shiftRow(g[6]);
+    }
+
+    stampEyes(g, spec, frame);
+    return g;
+  }
+
+  // Left column for an eye group of total width `totalW`. Alignment is a gentle
+  // 1px nudge off-center, clamped to stay off the edges (so eyes never jam into
+  // a corner and read as lopsided).
+  function eyeStart(totalW, align) {
+    const center = Math.floor((8 - totalW) / 2);
+    const s = align === "left" ? center - 1 : align === "right" ? center + 1 : center;
+    return Math.min(7 - totalW, Math.max(1, s));
+  }
+
+  function eyeCellsFor(style, row, gap, align) {
+    if (style === "visor" || style === "visor2") {
+      const rows = style === "visor2" ? [row, row + 1] : [row];
+      const cells = [];
+      for (const y of rows) for (let x = 0; x < 8; x++) cells.push([x, y]);
+      return cells;
+    }
+    const w = style === "tall" ? 1 : 2;
+    const h = style === "short" ? 1 : 2;
+    const leftStart = eyeStart(2 * w + gap, align);
+    const bases = [leftStart, leftStart + w + gap];
+    const cells = [];
+    for (const bx of bases)
+      for (let ey = 0; ey < h; ey++)
+        for (let ex = 0; ex < w; ex++) cells.push([bx + ex, row + ey]);
+    return cells;
+  }
+
+  function topFrameConflict(g, spec, row, gap, align, style) {
+    const symBody = spec.waist.indexOf("bite") !== 0 &&
+      !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
+    for (const [x, y] of eyeCellsFor(style, row, gap, align))
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const ny = y + dy, nx = x + dx;
+          if (ny < 0 || ny > 2) continue;
+          for (const cx of symBody ? [nx, 7 - nx] : [nx])
+            if (cx >= 0 && cx < 8 && g[ny][cx] === 0) return true;
+        }
+    return false;
+  }
+
+  function effectiveEyeRow(g, spec, gap, align, style) {
+    let row = spec.eyes.row;
+    const h = style === "short" || style === "visor" ? 1 : 2;
+    while (row + h - 1 < 7 && topFrameConflict(g, spec, row, gap, align, style)) row++;
+    return row;
+  }
+
+  function stampEyes(g, spec, frame) {
+    const gaze = (frame && frame.gaze) || spec.eyes.gaze || { dx: 0, dy: 0 };
+    // blink phases: 0 open · 1 squint (slit + pupil) · 2 closed (dark lid line);
+    // legacy boolean true = fully closed
+    const blink = frame && frame.blink === true ? 2 : (frame && frame.blink) || 0;
+    const gap = spec.eyes.gap || 1;      // px between the eyes
+    const align = spec.eyes.align || "center";
+    const style = spec.eyes.style;
+    const r0 = effectiveEyeRow(g, spec, gap, align, style); // top row of the eye
+
+    // Guarantee a 1px solid body frame: any empty cell touching an eye cell
+    // (incl. the cell itself) becomes body, so eyes never touch an edge/empty.
+    // On symmetric bodies the fill is mirrored so gap-1 (off-center) eyes can't
+    // skew the silhouette; asymmetric bodies (slants, bites) fill plainly so
+    // the deliberate asymmetry isn't repaired.
+    const symBody = spec.waist.indexOf("bite") !== 0 &&
+      !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full;
+    const frameBody = (cells) => {
+      for (const [x, y] of cells)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const ny = y + dy, nx = x + dx;
+            if (ny < 0 || ny > 7) continue;
+            for (const cx of symBody ? [nx, 7 - nx] : [nx])
+              if (cx >= 0 && cx < 8 && g[ny][cx] === 0) g[ny][cx] = 1;
+          }
+    };
+
+    // visor (1px band) / visor2 (2px band): black band(s) + two white holes.
+    if (style === "visor" || style === "visor2") {
+      const rows = style === "visor2" ? [r0, r0 + 1] : [r0];
+      const band = [];
+      for (const ry of rows) for (let x = 0; x < 8; x++) if (g[ry][x] !== 0) band.push([x, ry]);
+      frameBody(band);
+      const ls = eyeStart(2 + gap, align);
+      for (const ry of rows) {
+        for (let x = 0; x < 8; x++) if (g[ry][x] === 1) g[ry][x] = 3;
+        for (const ex of [ls, ls + 1 + gap]) if (g[ry][ex] === 3) g[ry][ex] = 2;
+      }
+      return;
+    }
+
+    // normal = 2x2 · short = 2x1 (pupil slides sideways) · tall = 1x2 (rests low)
+    const w = style === "tall" ? 1 : 2;
+    const h = style === "short" ? 1 : 2;
+    const mirror = !!spec.eyes.mirror;                         // right eye flips its pupil
+    const bar = spec.eyes.pupil === "bar" && style === "normal"; // 1x2 column pupil
+    const leftStart = eyeStart(2 * w + gap, align);
+    const bases = [leftStart, leftStart + w + gap];
+    const cells = [];
+    for (const bx of bases)
+      for (let ey = 0; ey < h; ey++)
+        for (let ex = 0; ex < w; ex++) cells.push([bx + ex, r0 + ey]);
+    frameBody(cells);                          // solid body around + behind the eyes
+    const lidRow = r0 + h - 1;                 // the row the eyelid closes onto
+    if (blink === 2) {
+      // closed: the eye region is body except a dark lid line
+      for (const [x, y] of cells) g[y][x] = y === lidRow ? 3 : 1;
+      return;
+    }
+    // open (all white) or squint (only the lid row stays open)
+    for (const [x, y] of cells) g[y][x] = blink === 1 && y !== lidRow ? 1 : 2;
+    bases.forEach((bx, i) => {
+      let pdx = w === 1 ? 0 : gaze.dx > 0 ? 1 : 0;
+      if (mirror && i === 1 && w === 2) pdx = 1 - pdx;
+      if (blink === 1) { g[lidRow][bx + pdx] = 3; return; } // 1px pupil in the slit
+      const py = h === 1 ? r0
+        : w === 1 ? r0 + (gaze.dy < 0 ? 0 : 1)   // tall eyes rest low
+        : r0 + (gaze.dy > 0 ? 1 : 0);
+      if (bar) { g[r0][bx + pdx] = 3; g[r0 + 1][bx + pdx] = 3; }
+      else g[py][bx + pdx] = 3;                  // pupil
+    });
+  }
+
+  // --- Self test: sweep invariants over many generated critters ----------
+  function selfTest() {
+    const failures = [];
+    for (let i = 0; i < 300; i++) {
+      const spec = generate("seed-" + i);
+      const g = rasterize(spec);
+      if (g.length !== 8 || g.some((r) => r.length !== 8)) failures.push([i, "size"]);
+      let symOk = true, hasWhite = false, hasPupil = false;
+      for (let y = 0; y < 8; y++)
+        for (let x = 0; x < 8; x++) {
+          const c = g[y][x];
+          if (![0, 1, 2, 3].includes(c)) failures.push([i, "code", x, y]);
+          if ((g[y][x] !== 0) !== (g[y][7 - x] !== 0)) symOk = false; // silhouette
+          if (c === 2) hasWhite = true;
+          if (c === 3) hasPupil = true;
+        }
+      const symmetric = !moduleByName(TOPS, spec.top).full && !moduleByName(BOTTOMS, spec.bottom).full &&
+        spec.waist.indexOf("bite") !== 0;
+      if (!symOk && symmetric) failures.push([i, "symmetry"]);
+      if (!hasWhite || !hasPupil) failures.push([i, "eyes"]);
+      // every eye cell keeps a 1px solid frame (no empty neighbor)
+      for (let y = 0; y < 8; y++)
+        for (let x = 0; x < 8; x++) {
+          if (g[y][x] !== 2 && g[y][x] !== 3) continue;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const ny = y + dy, nx = x + dx;
+              if (nx >= 0 && nx < 8 && ny >= 0 && ny < 8 && g[ny][nx] === 0)
+                failures.push([i, "eye-frame", x, y]);
+            }
+        }
+      if (JSON.stringify(g) !== JSON.stringify(rasterize(generate("seed-" + i))))
+        failures.push([i, "determinism"]);
+    }
+    return { passed: failures.length === 0, failures };
+  }
+
+  // --- Pure render helpers (DOM-free; canvas painting lives in the page) ---
+  // hex "#rrggbb" -> [r,g,b]
+  function hexToRgb(h) {
+    h = h.replace("#", "");
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function lerpHex(a, b, t) {
+    const ca = hexToRgb(a), cb = hexToRgb(b);
+    const f = (v) => ("0" + Math.round(v).toString(16)).slice(-2);
+    return "#" + f(ca[0] + (cb[0] - ca[0]) * t) + f(ca[1] + (cb[1] - ca[1]) * t) + f(ca[2] + (cb[2] - ca[2]) * t);
+  }
+  // Linear multi-stop blend: t=0 -> colors[0], t=1 -> colors[last] (a clean ramp).
+  function multiLerp(colors, t) {
+    if (colors.length === 1) return colors[0];
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const seg = t * (colors.length - 1);
+    const i = Math.min(colors.length - 2, Math.floor(seg));
+    return lerpHex(colors[i], colors[i + 1], seg - i);
+  }
+  // Gradient body paint over 1-3 selected colors. `dir` lays out the blend; `motion`
+  // animates it subtly over `frame`:
+  //   static = fixed · drift = slow scroll · pulse = gentle breathing
+  //   · sheen = a soft highlight band sweeps across · scan-y = smooth vertical scan.
+  function gradientPaint(colors, dir, motion, frame) {
+    const BANDS = 5;
+    const pos = (x, y) =>
+      dir === "none"           ? 0 :
+      dir === "diagonal-left"  ? (7 - x + y) / 14 :
+      dir === "radial"         ? Math.min(1, Math.hypot(x - 3.5, y - 3.5) / 4.95) :
+                                 (x + y) / 14;
+    return (x, y) => {
+      let u = pos(x, y);
+      if (motion === "drift") u += Math.sin(frame / 30) * 0.18;      // gentle slide
+      else if (motion === "pulse") u += Math.sin(frame / 22) * 0.12; // gentle breathe
+      const band = Math.round((u < 0 ? 0 : u > 1 ? 1 : u) * BANDS) / BANDS;
+      let col = multiLerp(colors, band);
+      if (motion === "sheen") {
+        const phase = (frame / 28) % 2;
+        const center = phase <= 1 ? phase : 2 - phase; // forward then backward
+        const amt = Math.max(0, 1 - Math.abs(pos(x, y) - center) * 6) * 0.22;
+        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
+      } else if (motion === "scan-y") {
+        const phase = (frame / 18) % 2;
+        const scanY = (phase <= 1 ? phase : 2 - phase) * 7;
+        const dist = Math.abs(y - scanY);
+        const amt = Math.max(0, 1 - dist / 1.35) * 0.28;
+        if (amt > 0) col = lerpHex(col, "#ffffff", amt);
+      }
+      return col;
+    };
+  }
+  // Body paint may be a flat hex string OR a per-cell function (x,y)->hex.
+  // Eyes are always white/black.
+  function cellFill(code, paint, x, y) {
+    if (code === 1) return typeof paint === "function" ? paint(x, y) : paint;
+    if (code === 2) return "#ffffff";
+    if (code === 3) return "#000000";
+    return null;
+  }
+  // Serialize an 8x8 grid to an SVG string (one <rect> per filled cell).
+  function toSVG(grid, paint, scale) {
+    const s = scale || 1;
+    let rects = "";
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const fill = cellFill(grid[y][x], paint, x, y);
+        if (!fill) continue;
+        rects += `<rect x="${x * s}" y="${y * s}" width="${s}" height="${s}" fill="${fill}"/>`;
+      }
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${8 * s}" height="${8 * s}" ` +
+      `viewBox="0 0 ${8 * s} ${8 * s}" shape-rendering="crispEdges">${rects}</svg>`
+    );
+  }
+
+  // --- Spec <-> string codec (shareable URLs) ------------------------------
+  // "~"-delimited, versioned. The seed is URI-encoded with "~" forced to %7E
+  // so it can never collide with the delimiter.
+  const encSeed = (s) => encodeURIComponent(s).replace(/~/g, "%7E");
+  function specToString(spec) {
+    return [
+      "2",
+      encSeed(spec.seed),
+      spec.colors.map((c) => PALETTE.findIndex((p) => p.name === c.name)).join(""),
+      DIRS.indexOf(spec.gradientDir),
+      MOTIONS.indexOf(spec.gradientMotion),
+      TOPS.findIndex((m) => m.name === spec.top),
+      BOTTOMS.findIndex((m) => m.name === spec.bottom),
+      WAISTS.indexOf(spec.waist),
+      EYE_STYLES.indexOf(spec.eyes.style),
+      spec.eyes.row,
+      spec.eyes.gap,
+      ALIGNS.indexOf(spec.eyes.align || "center"),
+      (spec.eyes.gaze.dx + 1) * 3 + (spec.eyes.gaze.dy + 1),
+      PUPILS.indexOf(spec.eyes.pupil || "dot"),
+      spec.eyes.mirror ? 1 : 0,
+    ].join("~");
+  }
+  function specFromString(str) {
+    const p = String(str).split("~");
+    // v2 adds pupil + mirror; v1 links keep working with safe defaults
+    const v2 = p[0] === "2" && p.length === 15;
+    if (!v2 && !(p[0] === "1" && p.length === 13)) return null;
+    // strict: every field after the seed is plain digits — rejects "", " 4",
+    // "4.5", "0x1" so one permalink string means exactly one spec
+    if (!p.slice(2).every((v) => /^\d+$/.test(v))) return null;
+    const idx = (v, arr) => { const i = +v; return Number.isInteger(i) && i >= 0 && i < arr.length ? i : -1; };
+    const colors = [...p[2]].map((d) => PALETTE[+d]).filter(Boolean);
+    const di = idx(p[3], DIRS), mi = idx(p[4], MOTIONS), ti = idx(p[5], TOPS),
+          bi = idx(p[6], BOTTOMS), wi = idx(p[7], WAISTS), si = idx(p[8], EYE_STYLES),
+          ai = idx(p[11], ALIGNS);
+    const row = +p[9], gap = +p[10], gz = +p[12];
+    if (colors.length < 1 || colors.length !== p[2].length) return null;
+    if ([di, mi, ti, bi, wi, si, ai].includes(-1)) return null;
+    if (![2, 3].includes(row) || ![1, 2].includes(gap) || !(gz >= 0 && gz <= 8)) return null;
+    const pi = v2 ? idx(p[13], PUPILS) : 0;
+    if (pi === -1 || (v2 && !["0", "1"].includes(p[14]))) return null;
+    let seed;
+    try { seed = decodeURIComponent(p[1]); } catch { return null; }
+    return {
+      seed,
+      colors,
+      gradientDir: DIRS[di],
+      gradientMotion: "static",
+      top: TOPS[ti].name,
+      bottom: BOTTOMS[bi].name,
+      waist: WAISTS[wi],
+      eyes: {
+        style: EYE_STYLES[si], row, gap, align: ALIGNS[ai],
+        gaze: { dx: Math.floor(gz / 3) - 1, dy: (gz % 3) - 1 },
+        pupil: PUPILS[pi], mirror: v2 && p[14] === "1",
+      },
+    };
+  }
+
+  return {
+    VERSION, PALETTE, TOPS, BOTTOMS, generate, randomSeed, rasterize, selfTest,
+    cellFill, gradientPaint, toSVG, specToString, specFromString,
+    _test: { rng, multiLerp },
+  };
+})();
+</script>
+<!-- SYCRITTERS-ENGINE:END -->
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+<script>
+  /* ---- Renderers (canvas painting; pure helpers live in the engine) --- */
+  const { cellFill, gradientPaint, toSVG, specToString, specFromString } = Sycritters;
+
+  // Paint the 8x8 critter cells into a 2d context (caller handles resize/clear).
+  // transform = { dx, dy, squashY } in cell units; pad = cell offset.
+  function paintCells(ctx, grid, paint, scale, transform, pad) {
+    const t = transform || {};
+    const dx = t.dx || 0, dy = t.dy || 0, sq = t.squashY == null ? 1 : t.squashY;
+    const p = pad || 0;
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const fill = cellFill(grid[y][x], paint, x, y);
+        if (!fill) continue;
+        ctx.fillStyle = fill;
+        const px = Math.round((x + p + dx) * scale);
+        const py = Math.round((y * sq + 8 * (1 - sq) + p + dy) * scale);
+        ctx.fillRect(px, py, scale, Math.ceil(scale * sq));
+      }
+  }
+
+  // Draw a critter into a canvas at an integer pixel scale (pad default 0).
+  function drawCanvas(canvas, grid, paint, scale, transform, pad) {
+    const p = pad || 0;
+    canvas.width = (8 + 2 * p) * scale;
+    canvas.height = (8 + 2 * p) * scale;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    paintCells(ctx, grid, paint, scale, transform, pad);
+  }
+
+  /* ---- Playground ----------------------------------------------------- */
+  const S = Sycritters;
+  const EDITOR_SCALE = 28; // px per cell in the editor canvas
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    editor: $("editor"), seed: $("seed"), seedReadout: $("seedReadout"),
+    rand: $("rand"), surprise: $("surprise"),
+    palette: $("palette"), colorCount: $("colorCount"), gradDir: $("gradDir"),
+    tops: $("tops"), bottoms: $("bottoms"), waist: $("waist"),
+    eyeStyle: $("eyeStyle"), eyePupil: $("eyePupil"), eyeMirror: $("eyeMirror"),
+    eyeGap: $("eyeGap"), eyeAlign: $("eyeAlign"), bodyAnim: $("bodyAnim"),
+    pushPanel: $("pushPanel"), pushDir: $("pushDir"), pushDirB: $("pushDirB"),
+    pushPlay: $("pushPlay"),
+    miniPreview: $("miniPreview"), miniSize: $("miniSize"), miniSizeVal: $("miniSizeVal"),
+    animEyes: $("animEyes"),
+    png: $("png"), svg: $("svg"), sheet: $("sheet"), link: $("link"),
+    genWall: $("genWall"), grid: $("grid"),
+  };
+
+  const params = new URLSearchParams(location.search);
+  const eyeShapes = [
+    ["round", "Round", '<circle cx="12" cy="12" r="8.4"/>', '<circle cx="12" cy="12" r="4.4"/>'],
+    ["oval", "Oval", '<ellipse cx="12" cy="12" rx="6.7" ry="8.4"/>', '<ellipse cx="12" cy="12" rx="3.8" ry="4.7"/>'],
+    ["soft-square", "Soft square", '<rect x="3.6" y="3.6" width="16.8" height="16.8" rx="4.2"/>', '<circle cx="12" cy="12" r="4.4"/>'],
+    ["pixel", "Pixel", '<rect x="3.5" y="3.5" width="17" height="17"/>', '<rect x="6" y="3.5" width="8.5" height="17"/>'],
+    ["wide", "Wide", '<ellipse cx="12" cy="12" rx="8.4" ry="5.6"/>', '<circle cx="12" cy="12" r="3.2"/>'],
+    ["almond", "Almond", '<path d="M3.6 12q8.4-13.6 16.8 0q-8.4 13.6-16.8 0Z"/>', '<circle cx="12" cy="12" r="3.7"/>'],
+    ["sleepy", "Sleepy", '<rect x="3.6" y="8.7" width="16.8" height="6.6" rx="2.2"/>', '<ellipse cx="12" cy="12" rx="3.8" ry="2.6"/>'],
+  ].map(([value, label, white, pupil]) => ({
+    value, label, icon: `<svg viewBox="0 0 24 24"><g fill="#fff">${white}</g><g fill="#000">${pupil}</g></svg>`,
+  }));
+  const accessories = [
+    { value: "none", label: "None", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="7"/><path d="m7 17 10-10"/></svg>' },
+    { value: "round-glasses", label: "Round glasses", width: 5.3, anchor: "eyes", art:
+      '<path fill="#000000" fill-rule="evenodd" d="M1 12a5 5 0 1 1 10 0 5 5 0 0 1-10 0Zm1.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0ZM13 12a5 5 0 1 1 10 0 5 5 0 0 1-10 0Zm1.5 0a3.5 3.5 0 1 0 7 0 3.5 3.5 0 0 0-7 0Z"/><path fill="#000000" d="M10 10h4v1.5h-4Z"/>' },
+    { value: "top-hat", label: "Top hat", width: 4.1, anchor: "top", art:
+      '<rect fill="#000000" x="6" y="3" width="12" height="15" rx="1"/><rect fill="#ffffff" x="6" y="13" width="12" height="3"/><ellipse fill="#000000" cx="12" cy="19" rx="11" ry="2"/>' },
+    { value: "bow-tie", label: "Bow tie", width: 3.15, anchor: "chest", art:
+      '<path fill="#000000" d="M3 5q1-1 8.5 4h1q7.5-5 8.5-4 1 1 1 7t-1 7q-1 1-8.5-4h-1Q4 20 3 19t-1-7q0-6 1-7Z"/><rect fill="#ffffff" x="9" y="9" width="6" height="6" rx="1.8"/>' },
+    { value: "headphones", label: "Headphones", width: 9.7, anchor: "head", art:
+      '<path fill="#000000" d="M1.5 15a10.5 10.5 0 0 1 21 0h-2a8.5 8.5 0 0 0-17 0Z"/><rect fill="#000000" x=".55" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#000000" x="19.65" y="12.4" width="3.8" height="7.7" rx="1.7"/><rect fill="#ffffff" x="1.4" y="14" width="1.6" height="4.6" rx=".8"/><rect fill="#ffffff" x="21" y="14" width="1.6" height="4.6" rx=".8"/>' },
+    { value: "crown", label: "Crown", width: 3.25, anchor: "top", art:
+      '<path fill="#000000" d="M2.6 6 8 10l4-6 4 6 5.4-4-2 12.5a1 1 0 0 1-1 .9H5.6a1 1 0 0 1-1-.9Z"/><path fill="#ffffff" d="M4.4 8.8 8.4 12 12 6.7l3.6 5.3 4-3.2-1.5 9.1H5.9Z"/><path fill="#000000" d="m12 12 1.4 1.6-1.4 1.6-1.4-1.6Z"/>' },
+    { value: "star-pin", label: "Star pin", width: 1.65, anchor: "pin", art:
+      '<path fill="#000000" d="m12 1.6 3.05 6.3 6.95 1-5 4.9 1.18 6.9L12 17.45l-6.18 3.25L7 13.8 2 8.9l6.95-1Z"/><path fill="#ffffff" d="m12 5 2.03 4.2 4.63.67-3.34 3.26.79 4.61L12 15.56l-4.11 2.18.79-4.61-3.34-3.26 4.63-.67Z"/>' },
+    { value: "scarf", label: "Scarf", width: 4.1, anchor: "chest", art:
+      '<path fill="#000000" d="M16 10h5l1.3 8.7-2 2.4-3.8-1.7Z"/><path fill="#000000" d="M3.5 6.8q8.5 3 17 0 1.4-.5 1.6 1l.4 3.4q.1 1.2-1.2 1.6Q12 16 2.7 12.8q-1.3-.4-1.2-1.6l.4-3.4q.2-1.5 1.6-1Z"/><path fill="#ffffff" d="M4 9.2q8 2.7 16 0l.2 1.1q-8.2 2.8-16.4 0Z"/>' },
+  ].map(option => option.art ? { ...option, icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${option.art}</svg>` } : option);
+  let eyeShape3D = eyeShapes.find(shape => shape.value === params.get("eyes"))?.value ?? "round";
+  let accessory3D = accessories.find(option => option.value === params.get("accessory")) ?? accessories[0];
+  const scaleInput = $("previewScale");
+  const scaleValue = $("previewScaleValue");
+  const requestedScale = Number(params.get("scale"));
+  if (requestedScale >= Number(scaleInput.min) && requestedScale <= Number(scaleInput.max)) {
+    scaleInput.value = requestedScale;
+  }
+  scaleValue.value = scaleInput.value + "%";
+  const menuBar = document.querySelector(".editor-menus");
+  let activeMenu = null;
+  const compactWall = matchMedia("(max-width: 590px)");
+  let wallPage = 0;
+  const shapePreviews = [];
+  const requestedView = params.get("view");
+  let show3D = requestedView === "3d" ||
+    (!requestedView && !params.has("c") && location.protocol !== "file:");
+  let preview3D = null, loading3D = false;
+
+  // Boot from a share URL (?c=<spec>) when present. We read the raw query
+  // ourselves: URLSearchParams would percent-decode the seed early and a seed
+  // containing "~" would then collide with the codec delimiter.
+  function specFromURL() {
+    const m = location.search.match(/[?&]c=([^&]+)/);
+    return (m && specFromString(m[1])) || null;
+  }
+
+  function force2x2Eyes(spec) {
+    return { ...spec, eyes: { ...spec.eyes, style: "normal" } };
+  }
+
+  let current = force2x2Eyes(specFromURL() || S.generate(show3D ? "mint-26802" : "sycritter"));
+  let bodyAnimMode = "none";
+  let pushDir = "r";   // active push direction (push wall)
+  let pushDirB = "l";  // the "transition to" direction for the A⇄B push preview
+  let lastFrame = -1;
+  let wallTiles = [];
+
+  function newSeed() {
+    return Math.floor(Math.random() * 0x100000000).toString(36);
+  }
+
+  // lock-an-axis: overrides mutate one axis, leaving the rest intact.
+  function override(patch) { current = { ...current, ...patch }; }
+  function setSeedAndRegen(seed) { current = force2x2Eyes(S.generate(seed)); }
+  function isPristineSpec(spec) {
+    return JSON.stringify(spec) === JSON.stringify(S.generate(spec.seed));
+  }
+  function seedFieldValue(spec) {
+    return isPristineSpec(spec) ? spec.seed : specToString(spec);
+  }
+
+  function updateURL() {
+    const eyes = eyeShape3D === "round" ? "" : "&eyes=" + eyeShape3D;
+    const accessory = accessory3D.value === "none" ? "" : "&accessory=" + accessory3D.value;
+    const scale = scaleInput.value === "100" ? "" : "&scale=" + scaleInput.value;
+    const view = show3D ? "&view=3d" + eyes + accessory + scale : "&view=pixel";
+    try { history.replaceState(null, "", "?c=" + specToString(current) + view + location.hash); } catch {}
+  }
+
+  function setMenu(button) {
+    if (activeMenu) {
+      $(activeMenu.getAttribute("aria-controls")).classList.remove("is-open");
+      activeMenu.setAttribute("aria-expanded", "false");
+    }
+    activeMenu = button;
+    if (activeMenu) {
+      $(activeMenu.getAttribute("aria-controls")).classList.add("is-open");
+      activeMenu.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  function showWallPage() {
+    const pageSize = compactWall.matches ? 6 : 10;
+    const pageCount = Math.ceil(wallTiles.length / pageSize);
+    wallPage = Math.min(wallPage, Math.max(0, pageCount - 1));
+    for (const [index, tile] of wallTiles.entries()) {
+      tile.button.hidden = show3D && Math.floor(index / pageSize) !== wallPage;
+    }
+    $("wallPrevious").disabled = wallPage === 0;
+    $("wallNext").disabled = wallPage + 1 >= pageCount;
+  }
+
+  async function setPreviewMode(use3D, animate = true) {
+    show3D = use3D;
+    if (!show3D) {
+      stopMic();
+      resetStagePointer();
+      if (soundIsAutomatic) stopSound();
+    }
+    $("app").dataset.view = show3D ? "3d" : "pixel";
+    setMenu(null);
+    showWallPage();
+    $("pupilOptions").hidden = show3D && eyeShape3D !== "pixel";
+    const controls = els.tops.closest(".controls");
+    controls.classList.toggle("show-shape-thumbnails", show3D && Boolean(preview3D));
+    $("viewPixel").setAttribute("aria-pressed", String(!show3D));
+    $("view3D").setAttribute("aria-pressed", String(show3D));
+    $("pixelStage").setAttribute("aria-hidden", String(show3D));
+    $("toolbar3D").hidden = !show3D;
+    $("exportLabel").textContent = show3D ? "▪ Share" : "▪ Export";
+    updateURL();
+    lastFrame = -1;
+    if (preview3D) {
+      preview3D.setProjection(show3D, animate && !reducedMotion.matches);
+      return;
+    }
+    if (!show3D) $("status3D").hidden = true;
+    if (!show3D || loading3D) return;
+
+    loading3D = true;
+    const status = $("status3D");
+    status.hidden = true;
+    try {
+      const { createStage } = await import("./critter-3d.mjs");
+      preview3D = createStage($("stage3D"), $("avatar3D"), shapePreviews, S.rasterize, restPaint);
+      preview3D.setEyeShape(eyeShape3D);
+      preview3D.setAccessory(accessory3D);
+      preview3D.setPreviewScale(Number(scaleInput.value) / 100);
+      preview3D.setCritter(current);
+      preview3D.setWall(wallTiles);
+      preview3D.setProjection(show3D, animate && !reducedMotion.matches);
+      lastFrame = -1;
+      $("resetOrbit").disabled = false;
+      $("micToggle").disabled = false;
+      $("avatarPreview").hidden = false;
+      controls.classList.toggle("show-shape-thumbnails", show3D);
+      status.hidden = true;
+    } catch (error) {
+      status.hidden = !show3D;
+      status.textContent = "3D preview couldn’t start. Check WebGL and your connection, or switch to Pixel.";
+      console.warn("Could not start the 3D preview", error);
+    } finally {
+      loading3D = false;
+    }
+  }
+
+  // render() now only reflects state into the controls; the animation loop
+  // owns drawing the editor critter every frame from `current`.
+  function render() {
+    current = force2x2Eyes(current);
+    els.seed.value = seedFieldValue(current);
+    // honest seed plate: flag when overrides mean the seed alone won't
+    // reproduce this critter (the URL still will)
+    const pristine = isPristineSpec(current);
+    els.seedReadout.textContent = current.seed + (pristine ? "" : " · edited");
+    updateURL();
+    syncControls();
+    preview3D?.setCritter(current);
+    lastFrame = -1; // force the loop to redraw the editor on the next frame
+  }
+
+  /* ---- animation -------------------------------------------------------- */
+  const EDITOR_PAD = 2; // cells of margin around the critter (headroom for attention motion)
+
+  // Most motion is quantized to 12fps integer frames -> pixel-art stepped.
+  // Processing and scanning use fractional frames so their highlights feel smooth.
+  const FPS = 12;
+
+  const hexes = (spec) => spec.colors.map((c) => c.hex);
+
+  // Resting (static) paint for wall tiles + exports.
+  function restPaint(spec) {
+    return gradientPaint(hexes(spec), spec.gradientDir, "static", 0);
+  }
+
+  // Smooth "paint" motions: name -> [gradient-motion, one-loop period in frames].
+  // The editor drives these with a continuous frame (smooth); exports map i/n
+  // onto exactly one period so the rendered cycle loops seamlessly.
+  const PAINT_CYCLE = {
+    thinking:   ["pulse",  2 * Math.PI * 22],
+    scanning:   ["scan-y", 36],
+    processing: ["sheen",  56],
+  };
+
+  // Live body paint at a continuous frame (used by editor exports: PNG/SVG).
+  function paintFor(spec, frame) {
+    const pc = PAINT_CYCLE[bodyAnimMode];
+    return pc ? gradientPaint(hexes(spec), spec.gradientDir, pc[0], frame) : restPaint(spec);
+  }
+
+  // Idle eyes for the editor: gaze drifts + periodic blink, keyed to the frame.
+  // Overlaid only when the active motion doesn't drive the eyes itself.
+  function eyeFrame(frame) {
+    const dirs = [
+      { dx: 1, dy: 0 }, { dx: 0, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: -1 },
+      { dx: 1, dy: 1 }, { dx: 0, dy: 0 }, { dx: -1, dy: 1 }, { dx: 0, dy: 0 },
+    ];
+    const gaze = dirs[Math.floor(frame / 22) % dirs.length];
+    const b = frame % 96; // ~every 8s: squint, closed, closed, squint
+    const blink = b === 0 || b === 3 ? 1 : b === 1 || b === 2 ? 2 : 0;
+    return { gaze, blink };
+  }
+
+  // Feet counter the celebrate sway so the legs read as stepping, not sliding.
+  const WALK_LEGS = [0, -1, -1, 0, 1, 1];
+
+  // --- Unified motion table -------------------------------------------------
+  // The editor and sprite sheet use the same loop lengths. Motions marked
+  // `eyes: true` animate their own eyes in place of idle glances and blinks.
+  const MOTIONS = [
+    { name: "none",       label: "none" },
+    { name: "thinking",   label: "thinking",        frames: 24, eyes: true },
+    { name: "scanning",   label: "scanning",        frames: 24, eyes: true },
+    { name: "processing", label: "processing",      frames: 24, eyes: true },
+    { name: "bob",        label: "bob",             frames: 4 },
+    { name: "jump",       label: "wants attention", frames: 12 },
+    { name: "walk",       label: "celebrate",       frames: 12 },
+    { name: "push",       label: "push wall",       frames: 8,  eyes: true, dirs: ["r", "l", "u", "d"] },
+    { name: "pull",       label: "pull heavy",      frames: 12, eyes: true },
+    { name: "study",      label: "study",           frames: 12, eyes: true },
+    { name: "float",      label: "float yoga",      frames: 24, eyes: true },
+    { name: "wiggle",     label: "wiggle",          frames: 8 },
+    { name: "droop",      label: "sad",             frames: 12, eyes: true },
+    { name: "excited",    label: "excited",         frames: 8 },
+    { name: "blink",      label: "blink",           frames: 12, eyes: true },
+    { name: "shake",      label: "shake",           frames: 8 },
+    { name: "nod",        label: "nod",             frames: 8,  eyes: true },
+    { name: "dance",      label: "dance",           frames: 8 },
+    { name: "look",       label: "look",            frames: 12, eyes: true },
+    { name: "sleep",      label: "sleep",           frames: 12, eyes: true },
+  ];
+  // A motion with `dirs` expands into one concrete cycle per direction
+  // ("push" -> push-r / push-l / push-u / push-d); everything else is itself.
+  const cyclesOf = (m) => (m.dirs ? m.dirs.map((d) => `${m.name}-${d}`) : [m.name]);
+
+  // --- push transitions: "pushx-AB" plays push A -> ease to push B -> back --
+  // The steady (un-throbbing) pushed pose per direction; the transition eases
+  // between two of these so the critter relaxes through neutral, turns, re-braces.
+  const PUSH_DIRS = ["r", "l", "u", "d"];
+  const PUSH_HOLD = 8, PUSH_TRANS = 8, PUSH_TRANSITION_LEN = 2 * PUSH_HOLD + 2 * PUSH_TRANS; // 32
+  const PUSH_POSE = {
+    r: { dx: 2, dy: 0, leg: -1, gaze: { dx: 1, dy: 0 } },
+    l: { dx: -2, dy: 0, leg: 1, gaze: { dx: -1, dy: 0 } },
+    u: { dx: 0, dy: -2, leg: 0, gaze: { dx: 0, dy: -1 } },
+    d: { dx: 0, dy: 2, leg: 0, gaze: { dx: 0, dy: 1 } },
+  };
+  // One eased step from pushed-pose `a` toward `b` (un-strains through neutral).
+  function lerpPushPose(spec, a, b, t) {
+    const A = PUSH_POSE[a], B = PUSH_POSE[b];
+    const r = (x, y) => Math.round(x + (y - x) * t);
+    const fr = {
+      gaze: { dx: r(A.gaze.dx, B.gaze.dx), dy: r(A.gaze.dy, B.gaze.dy) },
+      blink: false, legShift: r(A.leg, B.leg),
+    };
+    const squashY = 1 - Math.sin(Math.PI * t) * 0.08;
+    return { grid: S.rasterize(spec, fr), paint: restPaint(spec), transform: { dx: r(A.dx, B.dx), dy: r(A.dy, B.dy), squashY }, fr, eyesDriven: true };
+  }
+  // every ordered pair of distinct directions -> a 32-frame transition cycle
+  const PUSH_TRANSITIONS = {};
+  for (const a of PUSH_DIRS) for (const b of PUSH_DIRS) if (a !== b) PUSH_TRANSITIONS["pushx-" + a + b] = PUSH_TRANSITION_LEN;
+
+  // concrete cycle name -> frame count, for every cycle with motion (omits "none").
+  const MOTION_FRAMES = Object.assign(
+    Object.fromEntries(MOTIONS.filter((m) => m.frames).flatMap((m) => cyclesOf(m).map((c) => [c, m.frames]))),
+    PUSH_TRANSITIONS
+  );
+  const MOTION_DRIVES_EYES = new Set([
+    ...MOTIONS.filter((m) => m.eyes).flatMap(cyclesOf),
+    ...Object.keys(PUSH_TRANSITIONS),
+  ]);
+
+  // One frame of any motion -> { grid, paint, transform, fr, eyesDriven }.
+  // `i` is the integer step in [0,n); `liveFrame` (optional, continuous) drives
+  // the smooth paint cycles in the editor. Sprite sheets sample the loop at i/n.
+  function motionFrame(spec, cycle, i, n, liveFrame) {
+    const fr = { gaze: spec.eyes.gaze || { dx: 0, dy: 0 }, blink: false };
+    let transform = null, paint = restPaint(spec);
+    const pc = PAINT_CYCLE[cycle];
+    if (pc) {
+      const arg = liveFrame != null ? liveFrame : (i / n) * pc[1];
+      paint = gradientPaint(hexes(spec), spec.gradientDir, pc[0], arg);
+      if (cycle === "thinking") {
+        const g = [{ dx: 0, dy: -1 }, { dx: 1, dy: -1 }, { dx: 0, dy: 0 }, { dx: -1, dy: -1 }];
+        fr.gaze = g[Math.floor(i / 6) % g.length];
+      } else if (cycle === "processing") {
+        const g = [{ dx: -1, dy: 1 }, { dx: 0, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 0 }];
+        fr.gaze = g[Math.floor(i / 6) % g.length];
+      } // scanning: eyes hold steady forward
+    } else if (cycle === "jump") {       // visible label: wants attention
+      const dyS = [0, -1, -2, -2, -1, 0, 0, 0, 0, 0, 0, 0];
+      const sqS = [1, 1, 1, 1, 1, 0.88, 1, 1, 1, 1, 1, 1];
+      transform = { dx: 0, dy: dyS[i], squashY: sqS[i] };
+    } else if (cycle === "walk") {        // visible label: celebrate
+      const dxS = [0, 0, 1, 1, 1, 1, 0, 0, -1, -1, -1, -1];
+      const dyS = [0, 0, -1, -1, 0, 0, 0, 0, -1, -1, 0, 0];
+      const lg  = [0, 0, -1, -1, -1, -1, 0, 0, 1, 1, 1, 1];
+      transform = { dx: dxS[i], dy: dyS[i], squashY: 1 };
+      fr.legShift = lg[i];
+    } else if (cycle === "bob") {
+      transform = { dx: 0, dy: [0, 0, -1, -1][i], squashY: 1 };
+    } else if (cycle.indexOf("pushx-") === 0) { // push A -> ease to B -> hold -> back
+      const a = cycle[6], b = cycle[7], H = PUSH_HOLD, T = PUSH_TRANS;
+      if (i < H) return motionFrame(spec, "push-" + a, i, H);
+      if (i < H + T) return lerpPushPose(spec, a, b, (i - H) / T);
+      if (i < 2 * H + T) return motionFrame(spec, "push-" + b, i - (H + T), H);
+      return lerpPushPose(spec, b, a, (i - (2 * H + T)) / T);
+    } else if (cycle.indexOf("push") === 0) { // pushing a wall in a chosen direction
+      // dir ∈ r/l/u/d (bare "push" defaults to right). Lean into the wall,
+      // brace the legs behind a horizontal push, and strain in squash pulses.
+      const dir = cycle.split("-")[1] || "r";
+      const lean = [1, 2, 2, 2, 2, 2, 2, 1][i % 8];        // throb against the surface
+      const strain = [1, 0.94, 1, 0.94, 1, 0.94, 1, 0.94][i % 8];
+      const hx = dir === "r" ? 1 : dir === "l" ? -1 : 0;
+      const vy = dir === "d" ? 1 : dir === "u" ? -1 : 0;
+      transform = {
+        dx: hx * lean, dy: vy * lean,
+        squashY: dir === "d" ? Math.min(strain, 0.92) : strain, // pressing down compresses
+      };
+      if (hx) fr.legShift = -hx;          // feet braced behind a sideways push
+      fr.gaze = { dx: hx, dy: vy };       // eyes fixed on the surface
+    } else if (cycle === "pull") {        // heaving something heavy (load on the left)
+      // reach toward the load, then heave back hard with a straining shudder
+      const dxS = [-1, -1, 0, 1, 2, 2, 2, 1, 1, 0, -1, -1];
+      const sqS = [1, 1, 0.96, 0.9, 0.88, 0.92, 0.96, 1, 1, 1, 1, 1];
+      const lgS = [1, 1, 0, -1, -1, -1, -1, 0, 0, 1, 1, 1]; // dig the heels in on the heave
+      transform = { dx: dxS[i], dy: 0, squashY: sqS[i] };
+      fr.legShift = lgS[i];
+      fr.gaze = { dx: -1, dy: 0 };
+      fr.blink = [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0][i]; // squint at peak effort
+    } else if (cycle === "study") {       // learning: reading down, scanning lines
+      const gx = [-1, 0, 1, 1, -1, 0, 1, 1, 0, 0, 0, 0];
+      const gy = [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1]; // looks up to ponder mid-cycle
+      fr.gaze = { dx: gx[i], dy: gy[i] };
+      fr.blink = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0][i];
+      transform = { dx: 0, dy: [0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, 0][i], squashY: 1 };
+    } else if (cycle === "float") {       // serene floating yoga: hover + slow breath + sway
+      const dyS = [0, 0, -1, -1, -1, -2, -2, -2, -2, -2, -1, -1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0];
+      const sqS = [1, 1, 1, 0.98, 0.96, 0.94, 0.94, 0.96, 0.98, 1, 1, 1, 1, 1, 1, 0.98, 0.96, 0.94, 0.94, 0.96, 0.98, 1, 1, 1];
+      const lgS = [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0]; // shift "poses" side to side
+      const blS = [2, 2, 2, 2, 2, 2, 1, 0, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 1, 2, 2];     // eyes mostly closed, peeking open
+      transform = { dx: 0, dy: dyS[i], squashY: sqS[i] };
+      fr.legShift = lgS[i];
+      fr.gaze = { dx: 0, dy: -1 };        // gaze gently upward when the lids part
+      fr.blink = blS[i];
+    } else if (cycle === "wiggle") {      // playful side jitter
+      transform = {
+        dx: [0, 1, 0, -1, 0, 1, 0, -1][i], dy: 0,
+        squashY: [1, 0.94, 1, 0.94, 1, 0.94, 1, 0.94][i],
+      };
+    } else if (cycle === "droop") {       // sad: slow heavy sag, eyes downcast
+      transform = {
+        dx: 0, dy: 0,
+        squashY: [1, 0.97, 0.94, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.94, 0.97, 1][i],
+      };
+      fr.gaze = { dx: 0, dy: 1 };
+      fr.blink = [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0][i];
+    } else if (cycle === "excited") {     // bouncy double-hop
+      transform = {
+        dx: 0,
+        dy: [0, -2, 0, -2, 0, -2, 0, -2][i],
+        squashY: [0.9, 1, 0.9, 1, 0.9, 1, 0.9, 1][i],
+      };
+    } else if (cycle === "blink") {
+      fr.blink = [0, 0, 0, 0, 1, 2, 2, 1, 0, 0, 0, 0][i]; // ease shut, ease open
+    } else if (cycle === "shake") {       // quick "no" headshake
+      transform = { dx: [0, 1, 0, -1, 0, 1, 0, -1][i], dy: 0, squashY: 1 };
+    } else if (cycle === "nod") {         // double "yes" dip, gaze following
+      const down = [0, 1, 1, 0, 0, 1, 1, 0][i];
+      transform = { dx: 0, dy: down, squashY: 1 };
+      fr.gaze = { dx: 0, dy: down ? 1 : 0 };
+    } else if (cycle === "dance") {       // sway + squash on the beat, feet planted
+      transform = {
+        dx: [0, 1, 1, 0, 0, -1, -1, 0][i],
+        dy: [0, -1, 0, 0, 0, -1, 0, 0][i],
+        squashY: [1, 0.88, 1, 1, 1, 0.88, 1, 1][i],
+      };
+      fr.legShift = [0, -1, -1, 0, 0, 1, 1, 0][i];
+    } else if (cycle === "look") {        // eyes-only glance to the side and back
+      fr.gaze = { dx: [0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0][i], dy: 0 };
+    } else if (cycle === "sleep") {       // lids shut, slow breathing squash
+      fr.blink = 2;
+      transform = { dx: 0, dy: 0, squashY: [1, 1, 1, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 1, 1, 1][i] };
+    }
+    return {
+      grid: S.rasterize(spec, fr), paint, transform, fr,
+      eyesDriven: MOTION_DRIVES_EYES.has(cycle),
+    };
+  }
+
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  if (reducedMotion.addEventListener) reducedMotion.addEventListener("change", () => { lastFrame = -1; });
+
+  function editorAnimated() {
+    return !reducedMotion.matches && (els.animEyes.checked || bodyAnimMode !== "none");
+  }
+
+  // Everything the editor needs for one frame, via the shared motionFrame
+  // composer. The active cycle owns body + (when eyes:true) the eyes; otherwise
+  // the editor's idle-eye layer is overlaid on top so resting critters still
+  // glance and blink.
+  function composeFrame(frame) {
+    const cycle = reducedMotion.matches ? "none" : bodyAnimMode;
+    const n = MOTION_FRAMES[cycle] || 1;
+    const i = ((Math.floor(frame) % n) + n) % n;
+    const mf = motionFrame(current, cycle, i, n, frame);
+    if (!reducedMotion.matches && els.animEyes.checked && !mf.eyesDriven) {
+      const e = eyeFrame(frame);
+      const fr = { ...mf.fr, gaze: e.gaze, blink: e.blink };
+      return { ...mf, grid: S.rasterize(current, fr), fr };
+    }
+    return mf;
+  }
+
+  const MINI_PAD = 2; // margin cells in the scaled preview (headroom for motion)
+  function drawMini(c) {
+    const cells = 8 + 2 * MINI_PAD;
+    const want = +els.miniSize.value || 96;
+    const s = Math.max(1, Math.round(want / cells)); // crisp integer pixels-per-cell
+    drawCanvas(els.miniPreview, c.grid, c.paint, s, c.transform, MINI_PAD);
+    els.miniSizeVal.textContent = (cells * s) + "px"; // the actual (snapped) size
+  }
+
+  function draw(frame) {
+    if (show3D && preview3D && !preview3D.transitioning()) return;
+    const c = composeFrame(frame);
+    drawCanvas(els.editor, c.grid, c.paint, EDITOR_SCALE, c.transform, EDITOR_PAD);
+    if (!show3D) drawMini(c);
+  }
+
+  function loop(t) {
+    const rawFrame = t / (1000 / FPS);
+    const smoothState = !!PAINT_CYCLE[bodyAnimMode];
+    const frame = smoothState ? rawFrame : Math.floor(rawFrame);
+    if (smoothState || frame !== lastFrame) {
+      // skip redraws when nothing animates (lastFrame -1 forces one draw)
+      if (lastFrame === -1 || editorAnimated()) draw(frame);
+      lastFrame = frame;
+    }
+    if (show3D || preview3D?.transitioning()) {
+      const allowMotion = !reducedMotion.matches;
+      if (preview3D) {
+        const hearing = sampleMic(t);
+        preview3D.draw(t, allowMotion && els.animEyes.checked, bodyAnimMode, allowMotion, hearing, null, {
+          enabled: micSession?.context?.state === "running" && !document.hidden,
+          speaking: Boolean(micSession?.voiced),
+          steady: t - (micSession?.steadySince ?? t) > 900,
+        });
+        tickAutoSounds(t);
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  /* control builders */
+  function buildSwatches() {
+    els.palette.innerHTML = "";
+    for (const c of S.PALETTE) {
+      const b = document.createElement("button");
+      b.className = "swatch"; b.dataset.name = c.name;
+      b.style.background = c.hex; b.title = c.name;
+      b.addEventListener("click", () => { setPrimaryColor(c); render(); });
+      els.palette.appendChild(b);
+    }
+    const r = document.createElement("button");
+    r.className = "swatch swatch--rand"; r.textContent = "?"; r.title = "shuffle colors";
+    r.addEventListener("click", () => { override({ colors: runFrom(Math.floor(Math.random() * S.PALETTE.length), current.colors.length) }); render(); });
+    els.palette.appendChild(r);
+  }
+
+  // analogous run of n consecutive palette colors from `startIdx` (harmonious)
+  function runFrom(startIdx, n) {
+    const out = [];
+    for (let j = 0; j < n; j++) out.push(S.PALETTE[(startIdx + j) % S.PALETTE.length]);
+    return out;
+  }
+  const idxOf = (c) => S.PALETTE.findIndex((x) => x.name === c.name);
+  // clicking a swatch starts the run at that color (keeping the current count)
+  function setPrimaryColor(c) { override({ colors: runFrom(idxOf(c), current.colors.length) }); }
+  function setColorCount(n) { override({ colors: runFrom(idxOf(current.colors[0]), n) }); }
+
+  function previewRows(m) {
+    if (m.full) return m.rows;
+    return m.rows.map((r) => [r[0], r[1], r[2], r[3], r[3], r[2], r[1], r[0]]);
+  }
+  function previewBits(kind, value) {
+    const bits = Array.from({ length: 8 }, () => new Array(8).fill(0));
+    if (kind === "top") {
+      const rows = previewRows(S.TOPS.find((m) => m.name === value) || S.TOPS[0]);
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) bits[y][x] = rows[y][x];
+    } else if (kind === "bottom") {
+      const rows = previewRows(S.BOTTOMS.find((m) => m.name === value) || S.BOTTOMS[0]);
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) bits[y + 4][x] = rows[y][x];
+    } else if (kind === "waist") {
+      for (const y of [3, 4]) for (let x = 0; x < 8; x++) bits[y][x] = 1;
+      if (value === "pinch" || value === "narrow") for (const y of [3, 4]) { bits[y][0] = 0; bits[y][7] = 0; }
+      if (value === "narrow") for (const y of [3, 4]) { bits[y][1] = 0; bits[y][6] = 0; }
+      if (value === "bite-l") for (const y of [3, 4]) bits[y][0] = 0;
+      if (value === "bite-r") for (const y of [3, 4]) bits[y][7] = 0;
+    }
+    return bits;
+  }
+  function addPreview(button, kind, value, label) {
+    const grid = previewBits(kind, value);
+    const mini = document.createElement("span");
+    mini.className = "mini8";
+    mini.setAttribute("aria-hidden", "true");
+    for (const row of grid)
+      for (const cell of row) {
+        const px = document.createElement("i");
+        if (cell) px.className = "on";
+        mini.appendChild(px);
+      }
+    const text = document.createElement("span");
+    text.className = "seg__text";
+    text.textContent = label;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 72;
+    canvas.className = "shape-thumbnail";
+    canvas.setAttribute("aria-hidden", "true");
+    shapePreviews.push({ canvas, grid, kind, value, centerY: { top: 6, waist: 4, bottom: 2 }[kind] });
+    button.append(mini, canvas, text);
+  }
+
+  function buildSeg(container, values, onPick, withRandom) {
+    container.innerHTML = "";
+    for (const item of values) {
+      const opt = typeof item === "string" ? { value: item, label: item } : item;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.value = opt.value;
+      if (opt.preview) addPreview(b, opt.preview, opt.value, opt.label);
+      else if (opt.icon) {
+        const icon = document.createElement("span");
+        icon.className = "option-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = opt.icon;
+        b.append(icon, opt.label);
+      }
+      else b.textContent = opt.label;
+      b.addEventListener("click", () => { onPick(opt.value); render(); });
+      container.appendChild(b);
+    }
+    if (withRandom) {
+      const b = document.createElement("button");
+      b.textContent = "🎲"; b.dataset.value = "__rand"; b.title = "randomize";
+      b.addEventListener("click", () => {
+        const item = values[Math.floor(Math.random() * values.length)];
+        onPick(typeof item === "string" ? item : item.value); render();
+      });
+      container.appendChild(b);
+    }
+  }
+
+  function buildSegs() {
+    buildSeg(els.colorCount, ["1", "2", "3"], (v) => setColorCount(Number(v)), false);
+    buildSeg(els.gradDir, [
+      { value: "none", label: "Solid" },
+      { value: "diagonal-left", label: "Diagonal left" },
+      { value: "diagonal-right", label: "Diagonal right" },
+      { value: "radial", label: "Radial" },
+    ], (v) => override({ gradientDir: v, gradientMotion: "static" }), false);
+    buildSeg(els.tops, S.TOPS.map((m) => ({ value: m.name, label: m.name, preview: "top" })), (v) => override({ top: v }), true);
+    buildSeg(els.waist, ["straight", "pinch", "narrow", "bite-l", "bite-r"].map((v) => ({ value: v, label: v, preview: "waist" })), (v) => override({ waist: v }), false);
+    buildSeg(els.bottoms, S.BOTTOMS.map((m) => ({ value: m.name, label: m.name, preview: "bottom" })), (v) => override({ bottom: v }), true);
+    buildSeg(els.eyeStyle, ["normal"], (v) => override({ eyes: { ...current.eyes, style: v } }), false);
+    buildSeg($("eyeShape3D"), eyeShapes, value => {
+      eyeShape3D = value;
+      $("pupilOptions").hidden = value !== "pixel";
+      preview3D?.setEyeShape(value);
+    }, false);
+    buildSeg($("accessoryOptions"), accessories, value => {
+      accessory3D = accessories.find(option => option.value === value);
+      preview3D?.setAccessory(accessory3D);
+    }, false);
+    buildSeg(els.eyePupil, ["dot", "bar"], (v) => override({ eyes: { ...current.eyes, pupil: v } }), false);
+    buildSeg(els.eyeMirror, ["parallel", "mirrored"], (v) => override({ eyes: { ...current.eyes, mirror: v === "mirrored" } }), false);
+    buildSeg(els.eyeGap, ["1", "2"], (v) => override({ eyes: { ...current.eyes, gap: Number(v) } }), false);
+    buildSeg(els.eyeAlign, ["left", "center", "right"], (v) => override({ eyes: { ...current.eyes, align: v } }), false);
+    buildSeg(els.bodyAnim, MOTIONS.map((m) => ({ value: m.name, label: m.label })),
+      // "push" is directional: route it to the active push-<dir> cycle.
+      (v) => { bodyAnimMode = v === "push" ? "push-" + pushDir : v; }, false);
+    const DIR_LABELS = [
+      { value: "r", label: "▶ right" }, { value: "l", label: "◀ left" },
+      { value: "u", label: "▲ up" },    { value: "d", label: "▼ down" },
+    ];
+    buildSeg(els.pushDir, DIR_LABELS, (v) => { pushDir = v; bodyAnimMode = "push-" + v; }, false);
+    buildSeg(els.pushDirB, DIR_LABELS, (v) => {
+      pushDirB = v;
+      // if a transition is currently previewing, retarget it live
+      if (String(bodyAnimMode).indexOf("pushx-") === 0) bodyAnimMode = transitionCycle();
+    }, false);
+    // mark the options random generation deliberately skips
+    markSpice(els.tops, ["3tl", "3tr"]);
+    markSpice(els.bottoms, ["3bl", "3br"]);
+    markSpice(els.eyeAlign, ["left", "right"]);
+  }
+
+  function markSpice(container, values) {
+    for (const b of container.children)
+      if (values.includes(b.dataset.value)) {
+        b.classList.add("spice");
+        b.title = "manual pick — random skips this (Surprise Me sometimes dares)";
+      }
+  }
+
+  function setPressed(container, isOn) {
+    for (const b of container.children) b.setAttribute("aria-pressed", isOn(b) ? "true" : "false");
+  }
+  function syncControls() {
+    setPressed(els.palette, (b) => current.colors.some((c) => c.name === b.dataset.name));
+    setPressed(els.colorCount, (b) => b.dataset.value === String(current.colors.length));
+    setPressed(els.gradDir, (b) => b.dataset.value === current.gradientDir);
+    setPressed(els.tops, (b) => b.dataset.value === current.top);
+    setPressed(els.bottoms, (b) => b.dataset.value === current.bottom);
+    setPressed(els.waist, (b) => b.dataset.value === current.waist);
+    setPressed(els.eyeStyle, (b) => b.dataset.value === current.eyes.style);
+    setPressed($("eyeShape3D"), (b) => b.dataset.value === eyeShape3D);
+    setPressed($("accessoryOptions"), (b) => b.dataset.value === accessory3D.value);
+    setPressed(els.eyePupil, (b) => b.dataset.value === (current.eyes.pupil || "dot"));
+    setPressed(els.eyeMirror, (b) => b.dataset.value === (current.eyes.mirror ? "mirrored" : "parallel"));
+    setPressed(els.eyeGap, (b) => b.dataset.value === String(current.eyes.gap));
+    setPressed(els.eyeAlign, (b) => b.dataset.value === (current.eyes.align || "center"));
+    setPressed(els.bodyAnim, (b) =>
+      b.dataset.value === bodyAnimMode ||
+      (b.dataset.value === "push" && String(bodyAnimMode).indexOf("push") === 0));
+    setPressed(els.pushDir, (b) => b.dataset.value === pushDir);
+    setPressed(els.pushDirB, (b) => b.dataset.value === pushDirB);
+    els.pushPanel.hidden = String(bodyAnimMode).indexOf("push") !== 0;
+    els.pushPlay.setAttribute("aria-pressed", String(bodyAnimMode).indexOf("pushx-") === 0 ? "true" : "false");
+    setPressed(els.grid, (b) => b.dataset.seed === current.seed);
+  }
+  // the editor's current push/transition cycle (skips a degenerate A==B pair)
+  function transitionCycle() {
+    let b = pushDirB;
+    if (b === pushDir) b = PUSH_DIRS.find((d) => d !== pushDir);
+    return "pushx-" + pushDir + b;
+  }
+
+  /* gallery wall */
+  function generateWall(n) {
+    els.grid.innerHTML = "";
+    wallTiles = [];
+    wallPage = 0;
+    for (let i = 0; i < (n || 30); i++) {
+      const seed = newSeed();
+      const spec = S.generate(seed);
+      const grid = S.rasterize(spec);
+      const btn = document.createElement("button");
+      btn.className = "tile"; btn.dataset.seed = seed; btn.title = seed;
+      btn.setAttribute("aria-label", "load critter " + seed);
+      btn.setAttribute("aria-pressed", "false");
+      const c = document.createElement("canvas");
+      c.className = "wall-sprite";
+      drawCanvas(c, grid, restPaint(spec), 16);
+      const model = document.createElement("canvas");
+      model.className = "wall-model";
+      model.width = model.height = c.width;
+      model.hidden = true;
+      btn.append(c, model);
+      btn.addEventListener("click", () => {
+        current = spec;
+        render();
+        if (!show3D) $("playground").scrollIntoView({ behavior: reducedMotion.matches ? "instant" : "smooth" });
+      });
+      els.grid.appendChild(btn);
+      wallTiles.push({ button: btn, model, spec, grid });
+    }
+    showWallPage();
+    preview3D?.setWall(wallTiles);
+  }
+
+  /* export */
+  // Export what you see: the gradient at its current animation frame
+  // (resting eyes/body so a blink or mid-state frame can't spoil the file).
+  function livePaint() {
+    if (reducedMotion.matches) return restPaint(current);
+    return paintFor(current, Math.max(0, lastFrame));
+  }
+  function downloadPNG(scale) {
+    const c = document.createElement("canvas");
+    drawCanvas(c, S.rasterize(current), livePaint(), scale || 32);
+    const a = document.createElement("a");
+    a.download = `sycritter-${current.seed}.png`;
+    a.href = c.toDataURL("image/png"); a.click();
+  }
+  function downloadSVG(scale) {
+    const svg = toSVG(S.rasterize(current), livePaint(), scale || 32);
+    const a = document.createElement("a");
+    a.download = `sycritter-${current.seed}.svg`;
+    a.href = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    a.click();
+  }
+  // 12-frame horizontal sprite strip: body state + color state, resting eyes.
+  function buildSheetCanvas(scale, frames) {
+    const pad = 2, cell = (8 + 2 * pad) * scale;
+    const sheet = document.createElement("canvas");
+    sheet.width = cell * frames; sheet.height = cell;
+    const ctx = sheet.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const tmp = document.createElement("canvas");
+    const n = MOTION_FRAMES[bodyAnimMode] || frames; // "none" -> static strip
+    for (let f = 0; f < frames; f++) {
+      const mf = motionFrame(current, bodyAnimMode, f % n, n);
+      drawCanvas(tmp, mf.grid, mf.paint, scale, mf.transform, pad);
+      ctx.drawImage(tmp, f * cell, 0);
+    }
+    return sheet;
+  }
+  function downloadSheet(scale) {
+    const a = document.createElement("a");
+    a.download = `sycritter-${current.seed}-sheet.png`;
+    a.href = buildSheetCanvas(scale || 16, 12).toDataURL("image/png");
+    a.click();
+  }
+  function copyLink() {
+    navigator.clipboard.writeText(location.href).then(() => {
+      els.link.textContent = "Copied";
+      setTimeout(() => { els.link.textContent = "Link"; }, 900);
+    });
+  }
+
+  /* wiring */
+  els.seed.addEventListener("change", (e) => {
+    const value = e.target.value.trim();
+    current = force2x2Eyes(specFromString(value) || S.generate(value || newSeed()));
+    render();
+  });
+  els.rand.addEventListener("click", () => { setSeedAndRegen(newSeed()); render(); });
+  // Surprise me has personality: unlike 🎲 it sometimes dips into the
+  // manual-only spice (deep slants, off-center eyes).
+  els.surprise.addEventListener("click", () => {
+    const spec = S.generate(newSeed());
+    const mut = { ...spec, eyes: { ...spec.eyes } };
+    const isSlant = (nm) => /^[23][tb][lr]$/.test(nm);
+    const roll = Math.random();
+    if (roll < 0.4) {
+      if (Math.random() < 0.5) {
+        mut.top = Math.random() < 0.5 ? "3tl" : "3tr";
+        if (isSlant(mut.bottom)) mut.bottom = "flat";
+      } else {
+        mut.bottom = Math.random() < 0.5 ? "3bl" : "3br";
+        if (isSlant(mut.top)) mut.top = "flat";
+      }
+    } else if (roll < 0.55) {
+      mut.eyes.align = Math.random() < 0.5 ? "left" : "right";
+    }
+    current = mut;
+    render();
+  });
+  els.animEyes.addEventListener("change", render);
+  els.png.addEventListener("click", () => downloadPNG());
+  els.svg.addEventListener("click", () => downloadSVG());
+  els.sheet.addEventListener("click", () => downloadSheet());
+  els.link.addEventListener("click", copyLink);
+  els.pushPlay.addEventListener("click", () => { bodyAnimMode = transitionCycle(); render(); });
+  const soundPreview = $("soundPreview");
+  const soundStatus = $("soundStatus");
+  const autoSounds = $("autoSounds");
+  const stage3D = $("stage3D");
+  let soundButton = null;
+  let soundRequest = 0;
+  let soundIsAutomatic = false;
+  let soundGuardUntil = -Infinity;
+  let nextAutoSound = 0;
+  let nextAcknowledgement = 0;
+  let lastApproach = -Infinity;
+  let greetAt = null;
+  let stagePointer = null;
+  let voiceStartedAt = null;
+
+  function clearSound() {
+    if (soundButton) {
+      delete soundButton.dataset.playing;
+      soundButton.firstElementChild.textContent = "▶";
+      soundButton = null;
+    }
+  }
+
+  function stopSound() {
+    soundRequest++;
+    soundPreview.pause();
+    soundIsAutomatic = false;
+    soundGuardUntil = performance.now() + 160;
+    clearSound();
+  }
+
+  async function playSound(button, automatic = false) {
+    const request = ++soundRequest;
+    soundIsAutomatic = automatic;
+    soundStatus.textContent = "";
+    clearSound();
+    soundButton = button;
+    soundPreview.src = "./sounds/" + button.dataset.sound + ".mp3";
+    try {
+      await soundPreview.play();
+      if (request !== soundRequest) return;
+      button.dataset.playing = "true";
+      button.firstElementChild.textContent = "♪";
+    } catch {
+      if (request !== soundRequest) return;
+      clearSound();
+      soundIsAutomatic = false;
+      soundStatus.textContent = automatic ? "Play a sound once to enable audio in this browser."
+        : "Couldn’t play that sound. Try again.";
+    }
+  }
+
+  function autoSound(name, time = performance.now()) {
+    const acknowledgement = name === "soft-beeps";
+    const readyAt = acknowledgement ? nextAcknowledgement : nextAutoSound;
+    if (!show3D || !autoSounds.checked || document.hidden || listening
+        || time < readyAt || !soundPreview.paused) return false;
+    nextAutoSound = time + 4000;
+    if (acknowledgement) nextAcknowledgement = nextAutoSound;
+    const button = $("soundOptions").querySelector(`[data-sound="${name}"]`);
+    void playSound(button, true);
+    return true;
+  }
+
+  function tickAutoSounds(time) {
+    if (greetAt === null || time < greetAt) return;
+    greetAt = null;
+    if (autoSound("hello", time)) lastApproach = time;
+  }
+
+  function resetStagePointer() {
+    stagePointer = null;
+    greetAt = null;
+    preview3D?.setPointer(null);
+  }
+
+  document.addEventListener("pointermove", event => {
+    if (!show3D || !preview3D || event.pointerType === "touch" || event.buttons || stagePointer) return;
+    const bounds = stage3D.getBoundingClientRect();
+    const clamp = n => Math.max(-1, Math.min(1, n));
+    if (!bounds.width || !bounds.height) return;
+    preview3D.setPointer({
+      x: clamp(2 * (event.clientX - bounds.left) / bounds.width - 1),
+      y: clamp(1 - 2 * (event.clientY - bounds.top) / bounds.height),
+    });
+  });
+  document.documentElement.addEventListener("pointerleave", resetStagePointer);
+  window.addEventListener("blur", resetStagePointer);
+  stage3D.addEventListener("pointerenter", event => {
+    const time = performance.now();
+    if (event.pointerType !== "touch" && autoSounds.checked && time - lastApproach > 12000) {
+      greetAt = time + 400;
+    }
+  });
+  stage3D.addEventListener("pointerleave", () => { greetAt = null; });
+  stage3D.addEventListener("pointerdown", event => {
+    if (!show3D || event.button !== 0) return;
+    stagePointer = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now(), moved: false };
+    greetAt = null;
+    preview3D?.setPointer(null);
+  });
+  window.addEventListener("pointermove", event => {
+    if (stagePointer?.id === event.pointerId && Math.hypot(
+      event.clientX - stagePointer.x, event.clientY - stagePointer.y
+    ) > 7) stagePointer.moved = true;
+  });
+  window.addEventListener("pointercancel", event => {
+    if (stagePointer?.id === event.pointerId) resetStagePointer();
+  });
+  window.addEventListener("pointerup", event => {
+    if (stagePointer?.id !== event.pointerId) return;
+    const isTap = !stagePointer.moved && performance.now() - stagePointer.at < 550;
+    stagePointer = null;
+    if (isTap) autoSound("curious-trill");
+  });
+
+  $("soundOptions").addEventListener("click", event => {
+    const button = event.target.closest("button[data-sound]");
+    if (button) void playSound(button);
+  });
+  soundPreview.addEventListener("ended", () => {
+    soundIsAutomatic = false;
+    soundGuardUntil = performance.now() + 160;
+    clearSound();
+  });
+  autoSounds.addEventListener("change", () => {
+    if (!autoSounds.checked) {
+      greetAt = null;
+      if (soundIsAutomatic) stopSound();
+      return;
+    }
+    if (autoSound("hello")) lastApproach = performance.now();
+  });
+  els.bodyAnim.addEventListener("click", event => {
+    const motion = event.target.closest("button")?.dataset.value;
+    if (motion === "sleep") autoSound("sleepy-hum");
+    if (motion === "excited" || motion === "jump") autoSound("bright-chirp");
+  });
+  els.miniSize.addEventListener("input", () => { lastFrame = -1; }); // redraw the scaled preview
+  els.genWall.addEventListener("click", () => generateWall());
+  $("wallPrevious").addEventListener("click", () => { wallPage--; showWallPage(); });
+  $("wallNext").addEventListener("click", () => { wallPage++; showWallPage(); });
+  compactWall.addEventListener("change", showWallPage);
+  menuBar.addEventListener("click", event => {
+    const button = event.target.closest("button");
+    if (button) setMenu(button === activeMenu ? null : button);
+  });
+  document.addEventListener("pointerdown", event => {
+    if (activeMenu && !menuBar.contains(event.target) &&
+        !$(activeMenu.getAttribute("aria-controls")).contains(event.target)) setMenu(null);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && activeMenu) {
+      activeMenu.focus();
+      setMenu(null);
+    }
+  });
+  const micButton = $("micToggle");
+  const micStatus = $("micStatus");
+  const micLevel = $("micLevel");
+  const micBrowserLink = $("micBrowserLink");
+  let micSession = null;
+  let listening = false;
+
+  function showMicHelp(message) {
+    micStatus.textContent = message;
+    micBrowserLink.href = location.href;
+    micBrowserLink.hidden = false;
+  }
+
+  function setListening(active, time = null) {
+    if (listening === active) return;
+    listening = active;
+    micButton.dataset.listening = String(active);
+    micStatus.textContent = active ? "Listening to you…" : "Mic on. Speak to get their attention.";
+    if (active) voiceStartedAt = time;
+    else {
+      if (time !== null && voiceStartedAt !== null && micSession.lastVoice - voiceStartedAt >= 420) {
+        autoSound("soft-beeps", time);
+      }
+      voiceStartedAt = null;
+    }
+  }
+
+  function stopMic(message = "") {
+    const session = micSession;
+    micSession = null;
+    clearTimeout(session?.hintTimer);
+    session?.stream?.getTracks().forEach(track => track.stop());
+    session?.source?.disconnect();
+    session?.context?.close().catch(() => {});
+    listening = false;
+    voiceStartedAt = null;
+    micButton.setAttribute("aria-pressed", "false");
+    micButton.dataset.listening = "false";
+    micLevel.hidden = true;
+    micLevel.value = 0;
+    micBrowserLink.hidden = true;
+    micStatus.textContent = message;
+  }
+
+  async function startMic() {
+    if (micSession) { stopMic(); return; }
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext || !navigator.mediaDevices?.getUserMedia) {
+      showMicHelp("Microphone access is unavailable here. Try localhost or HTTPS in your browser.");
+      return;
+    }
+    const session = { lastVoice: -Infinity, onset: null, noiseFloor: 0.0015 };
+    micSession = session;
+    micButton.setAttribute("aria-pressed", "true");
+    micBrowserLink.hidden = true;
+    micStatus.textContent = "Allow microphone access when your browser asks.";
+    session.hintTimer = setTimeout(() => {
+      if (micSession === session) showMicHelp(session.stream
+        ? "The microphone connected, but audio input is paused. Turn Mic off and try again."
+        : "No permission prompt? Open this page in Chrome or Safari and try Mic there.");
+    }, 6000);
+    try {
+      // Unlock Web Audio while the click is still active, before the permission prompt.
+      const context = session.context = new AudioContext();
+      const resume = context.resume().then(() => true, () => false);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+      if (micSession !== session) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      session.stream = stream;
+      for (const track of stream.getAudioTracks()) track.addEventListener("ended", () => {
+        if (micSession === session) stopMic("The microphone disconnected.");
+      });
+      const source = session.source = context.createMediaStreamSource(stream);
+      const analyser = session.analyser = context.createAnalyser();
+      analyser.fftSize = 2048;
+      session.samples = new Float32Array(analyser.fftSize);
+      // Read the signal without connecting it to the speakers.
+      source.connect(analyser);
+      if (!await resume) throw Error("Could not resume audio input");
+      if (micSession !== session) return;
+      clearTimeout(session.hintTimer);
+      micBrowserLink.hidden = true;
+      micLevel.hidden = false;
+      micStatus.textContent = "Mic on. Speak to get their attention.";
+    } catch (error) {
+      if (micSession !== session) return;
+      stopMic();
+      if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+        showMicHelp("Microphone permission was denied. Check your browser and macOS microphone permissions.");
+      } else if (error.name === "NotFoundError") {
+        micStatus.textContent = "No microphone found. Check your selected input device.";
+      } else {
+        showMicHelp("The microphone couldn’t start. Check your input device and try again.");
+      }
+    }
+  }
+
+  function sampleMic(time) {
+    const session = micSession;
+    if (session?.context?.state !== "running" || !session.samples) {
+      if (session) session.voiced = false;
+      setListening(false);
+      return false;
+    }
+    session.analyser.getFloatTimeDomainData(session.samples);
+    let energy = 0;
+    for (const value of session.samples) energy += value * value;
+    const volume = Math.sqrt(energy / session.samples.length);
+    const db = 20 * Math.log10(Math.max(0.0001, volume));
+    micLevel.value = Math.max(0, Math.min(1, (db + 62) / 46));
+    // Prevent the critter from treating its own speakers as a new conversation.
+    if (!listening && (!soundPreview.paused || time < soundGuardUntil)) {
+      session.onset = null;
+      session.voiced = false;
+      session.steadySince = null;
+      return false;
+    }
+    const threshold = listening ? Math.max(0.0025, session.noiseFloor * 1.7)
+      : Math.max(0.0045, session.noiseFloor * 2.5);
+    if (volume > threshold) {
+      session.onset ??= time;
+      if (listening || time - session.onset >= 54) session.lastVoice = time;
+      const change = Math.abs(volume - (session.previousVolume ?? volume)) / Math.max(volume, 0.001);
+      if (change < 0.18) session.steadySince ??= time;
+      else session.steadySince = null;
+    } else {
+      session.onset = null;
+      if (!listening) session.noiseFloor += (volume - session.noiseFloor) * 0.02;
+      session.steadySince = null;
+    }
+    session.previousVolume = volume;
+    session.voiced = time - session.lastVoice < 180;
+    setListening(time - session.lastVoice < 500, time);
+    return listening;
+  }
+
+  micButton.addEventListener("click", startMic);
+  window.addEventListener("pagehide", () => { stopMic(); stopSound(); });
+  $("viewPixel").addEventListener("click", () => setPreviewMode(false));
+  $("view3D").addEventListener("click", () => setPreviewMode(true));
+  $("resetOrbit").addEventListener("click", () => preview3D?.resetView());
+  scaleInput.addEventListener("input", () => {
+    scaleValue.value = scaleInput.value + "%";
+    preview3D?.setPreviewScale(Number(scaleInput.value) / 100);
+    updateURL();
+  });
+
+  buildSwatches();
+  buildSegs();
+  generateWall();
+  render();
+  if (show3D) setPreviewMode(true, false);
+  requestAnimationFrame(loop);
+
+  // Run engine invariant checks from the browser via index.html?test
+  if (new URLSearchParams(location.search).has("test")) {
+    const r = Sycritters.selfTest();
+    console.log(
+      r.passed ? "Sycritters selfTest: PASS" : "Sycritters selfTest: FAIL",
+      r.failures
+    );
+  }
+</script>
+</body>
+</html>
