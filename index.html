@@ -1132,7 +1132,9 @@ globalThis.Sycritters = (function () {
   let wallPage = 0;
   const shapePreviews = [];
   const requestedView = params.get("view");
-  let curatedMode = requestedView === "curated";
+  // curated opens by default; file:// stays on pixel because 3d modules need http
+  let curatedMode = requestedView === "curated" ||
+    (!requestedView && !params.has("c") && location.protocol !== "file:");
   let curatedId = ["brass", "ember", "minty", "loaf", "barrel", "wedge", "boulder", "pillar", "duo", "step", "cushion"].includes(params.get("critter")) ? params.get("critter") : "brass";
   let curatedCatalog = null;
   let curatedTiles = [];
