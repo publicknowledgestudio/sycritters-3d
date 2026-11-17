@@ -15,8 +15,11 @@ Open [the playground](http://127.0.0.1:4173/). The 3D view uses WebGL 2 and load
 - Pick a creature from **The Wall**, enter a **Seed**, or select **Surprise me**.
 - Drag the 3D preview or focus it and use the arrow keys to orbit. Use **Scale** to resize the main preview.
 - Select **Mic** to let the creature react to your voice. Audio is analyzed in the browser. Allow microphone access on localhost or HTTPS.
-- Open **Motion** to choose an animation, preview a sound cue, or enable **Auto sounds**.
-- Open **Share** to copy a link. Switch to **Pixel** to download a PNG, SVG, or sprite sheet.
+- Select **Curated** beside Pixel and 3D for eleven handcrafted solids.
+- Under **Top → Volume**, choose a solid Orb, Bean, Pear, Capsule, Pebble, or Block.
+- Click the critter to pet it. Dragging still orbits.
+- Open **Motion** to choose an animation, including seven 3D block animations,, preview a sound cue, or enable **Auto sounds**.
+- Open **Share** to copy a link or capture a transparent 3D PNG after a three-second countdown. Switch to **Pixel** to download a PNG, SVG, or sprite sheet.
 
 ## Composer demo
 
